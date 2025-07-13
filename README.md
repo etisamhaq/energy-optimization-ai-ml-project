@@ -38,7 +38,6 @@ Buildings account for approximately 40% of global energy consumption and 36% of 
 
 ![Alt Text](images/report.png)
 
-images/building_information.png
 ## Project Structure
 
 ```
