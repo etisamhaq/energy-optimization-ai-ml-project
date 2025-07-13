@@ -1,0 +1,54 @@
+# Multi-stage build for Energy Optimization ML
+FROM python:3.9-slim as builder
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
+    g++ \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set working directory
+WORKDIR /app
+
+# Copy requirements first for better caching
+COPY requirements-docker.txt requirements.txt ./
+
+# Install Python dependencies
+RUN pip install --no-cache-dir --user -r requirements-docker.txt
+
+# Production stage
+FROM python:3.9-slim
+
+# Install runtime dependencies
+RUN apt-get update && apt-get install -y \
+    libgomp1 \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user
+RUN useradd -m -u 1000 mluser
+
+# Set working directory
+WORKDIR /app
+
+# Copy installed packages from builder
+COPY --from=builder /root/.local /home/mluser/.local
+
+# Copy application code
+COPY --chown=mluser:mluser . .
+
+# Make sure scripts are executable
+RUN chmod +x src/data/*.py src/models/*.py
+
+# Switch to non-root user
+USER mluser
+
+# Add local bin to PATH
+ENV PATH=/home/mluser/.local/bin:$PATH
+
+# Expose ports
+EXPOSE 8000 8501
+
+# Default command (can be overridden)
+CMD ["python", "-m", "uvicorn", "src.api.main:app", "--host", "0.0.0.0", "--port", "8000"]

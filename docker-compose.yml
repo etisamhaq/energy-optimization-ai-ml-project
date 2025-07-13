@@ -1,0 +1,59 @@
+version: '3.8'
+
+services:
+  api:
+    build: .
+    container_name: energy-optimization-api
+    ports:
+      - "8000:8000"
+    environment:
+      - PYTHONUNBUFFERED=1
+      - LOG_LEVEL=INFO
+    volumes:
+      - ./data:/app/data
+      - ./models:/app/models
+    command: ["python", "-m", "uvicorn", "src.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  dashboard:
+    build: .
+    container_name: energy-optimization-dashboard
+    ports:
+      - "8501:8501"
+    environment:
+      - PYTHONUNBUFFERED=1
+    volumes:
+      - ./data:/app/data
+      - ./models:/app/models
+    command: ["streamlit", "run", "src/visualization/dashboard.py", "--server.port=8501", "--server.address=0.0.0.0"]
+    restart: unless-stopped
+    depends_on:
+      - api
+
+  # Optional: MLflow tracking server
+  mlflow:
+    image: python:3.9-slim
+    container_name: energy-optimization-mlflow
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./mlruns:/mlruns
+      - ./mlflow-artifacts:/mlflow-artifacts
+    environment:
+      - MLFLOW_BACKEND_STORE_URI=file:///mlruns
+      - MLFLOW_DEFAULT_ARTIFACT_ROOT=file:///mlflow-artifacts
+    command: >
+      bash -c "pip install mlflow && 
+               mlflow server --backend-store-uri file:///mlruns 
+                           --default-artifact-root file:///mlflow-artifacts 
+                           --host 0.0.0.0"
+    restart: unless-stopped
+
+volumes:
+  mlruns:
+  mlflow-artifacts:
