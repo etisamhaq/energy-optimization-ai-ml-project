@@ -46,8 +46,8 @@ energy-optimization-ml/
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/energy-optimization-ml.git
-cd energy-optimization-ml
+git clone https://github.com/etisamhaq/energy-optimization-ai-ml.git
+cd energy-optimization-ai-ml
 ```
 
 2. Create a virtual environment:
