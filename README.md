@@ -22,7 +22,7 @@ Buildings account for approximately 40% of global energy consumption and 36% of 
 - **Interactive Dashboard**: Visualizes predictions and optimization opportunities
 
 
-![Alt Text](energy-optimization-ai-ml-project/images/building_information.png)
+![Alt Text](images/building_information.png)
 
 images/building_information.png
 ## Project Structure
