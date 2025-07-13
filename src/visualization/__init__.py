@@ -1,0 +1,3 @@
+"""
+Energy optimization visualization package.
+"""
