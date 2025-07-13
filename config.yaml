@@ -1,0 +1,58 @@
+# Energy Optimization ML Configuration
+
+model:
+  ensemble_models:
+    - xgboost
+    - lightgbm
+    - random_forest
+    - prophet
+  
+  xgboost_params:
+    n_estimators: 300
+    max_depth: 6
+    learning_rate: 0.1
+    subsample: 0.8
+    colsample_bytree: 0.8
+  
+  lightgbm_params:
+    n_estimators: 300
+    num_leaves: 31
+    learning_rate: 0.1
+    subsample: 0.8
+    colsample_bytree: 0.8
+
+data:
+  data_dir: data
+  raw_dir: data/raw
+  processed_dir: data/processed
+  external_dir: data/external
+  models_dir: models
+  
+  n_buildings: 10
+  n_days_history: 365
+  
+  train_ratio: 0.7
+  val_ratio: 0.1
+  test_ratio: 0.2
+
+optimization:
+  electricity_rate: 0.12  # $/kWh
+  peak_hours: [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18]
+  carbon_intensity: 0.4  # kg CO2/kWh
+  
+  min_savings_kwh: 100
+  min_roi_percentage: 10
+  max_payback_months: 60
+
+api:
+  host: 0.0.0.0
+  port: 8000
+  reload: true
+  workers: 1
+  
+  max_prediction_days: 365
+  max_buildings_per_request: 50
+  request_timeout: 300
+
+log_level: INFO
+random_seed: 42
