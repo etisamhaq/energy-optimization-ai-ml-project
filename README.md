@@ -21,6 +21,10 @@ Buildings account for approximately 40% of global energy consumption and 36% of 
 - **Optimization Engine**: Provides specific recommendations for reducing energy consumption
 - **Interactive Dashboard**: Visualizes predictions and optimization opportunities
 
+
+![Alt Text](assets/images/building_information.png)
+
+images/building_information.png
 ## Project Structure
 
 ```
