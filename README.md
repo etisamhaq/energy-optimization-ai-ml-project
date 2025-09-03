@@ -63,8 +63,8 @@ energy-optimization-ml/
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/etisamhaq/energy-optimization-ai-ml.git
-cd energy-optimization-ai-ml
+git clone https://github.com/etisamhaq/energy-optimization-ai-ml-project.git
+cd energy-optimization-ai-ml-project
 ```
 
 2. Create a virtual environment:
@@ -166,9 +166,3 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - NOAA for climate data access
 - Building operators who provided consumption data
 - Open-source ML community for tools and frameworks
-
-## Contact
-
-For questions or collaboration opportunities, please contact:
-- Email: energy-ml@example.com
-- GitHub Issues: [Create an issue](https://github.com/yourusername/energy-optimization-ml/issues)
