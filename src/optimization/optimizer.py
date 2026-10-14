@@ -80,6 +80,9 @@ class EnergyOptimizer:
         consumption_data['day_of_week'] = consumption_data['timestamp'].dt.dayofweek
         consumption_data['month'] = consumption_data['timestamp'].dt.month
         
+        timestamps = consumption_data['timestamp']
+        analysis['period_days'] = (timestamps.max() - timestamps.min()).total_seconds() / 86400 + 1 / 24
+        
         # Peak vs off-peak analysis
         peak_mask = consumption_data['hour'].isin(self.peak_hours)
         analysis['peak_usage'] = {
@@ -285,7 +288,11 @@ class EnergyOptimizer:
         
         # LED lighting upgrade
         lighting_estimate = analysis['peak_usage']['total_kwh'] * 0.2  # Lighting typically 20%
-        building_age = building_metadata.get('building_age', 10)
+        building_age = building_metadata.get('building_age')
+        if building_age is None and 'year_built' in building_metadata:
+            building_age = datetime.now().year - building_metadata['year_built']
+        if building_age is None:
+            building_age = 10
         
         if building_age > 10:
             rec = OptimizationRecommendation(
@@ -375,15 +382,17 @@ class EnergyOptimizer:
         # Solar PV installation
         if building_metadata.get('building_type') in ['office', 'retail', 'industrial']:
             daily_consumption = sum(analysis['daily_patterns']['hourly_averages'].values())
-            solar_potential = daily_consumption * 0.3  # 30% offset potential
+            solar_potential = daily_consumption * 0.3  # 30% offset potential (kWh/day)
+            # Use the same horizon as the other recommendations (the analysed period)
+            period_days = max(analysis['period_days'], 1)
             
             rec = OptimizationRecommendation(
                 recommendation_id="REN001",
                 type=OptimizationType.RENEWABLE_INTEGRATION,
                 title="Rooftop Solar PV Installation",
                 description="Install solar panels to offset 30% of electricity consumption",
-                impact_kwh=solar_potential * 365,
-                cost_savings=solar_potential * 365 * self.electricity_rate,
+                impact_kwh=solar_potential * period_days,
+                cost_savings=solar_potential * period_days * self.electricity_rate,
                 implementation_cost=solar_potential * 1000,  # $1000/kW estimate
                 payback_period_months=84,  # 7 years
                 priority=5,
@@ -436,6 +445,8 @@ class EnergyOptimizer:
         total_kwh_savings = sum(rec.impact_kwh for rec in all_recommendations)
         total_cost_savings = sum(rec.cost_savings for rec in all_recommendations)
         total_implementation_cost = sum(rec.implementation_cost for rec in all_recommendations)
+        # Savings are computed over the analysed period; scale them to a full year
+        annualization_factor = 365 / analysis['period_days']
         
         # Create report
         report = {
@@ -444,7 +455,7 @@ class EnergyOptimizer:
             'summary': {
                 'total_recommendations': len(all_recommendations),
                 'total_kwh_savings_potential': total_kwh_savings,
-                'total_cost_savings_annual': total_cost_savings * 12,
+                'total_cost_savings_annual': total_cost_savings * annualization_factor,
                 'total_implementation_cost': total_implementation_cost,
                 'average_payback_months': np.mean([rec.payback_period_months for rec in all_recommendations 
                                                   if rec.payback_period_months < float('inf')]),
@@ -460,7 +471,7 @@ class EnergyOptimizer:
                 report['recommendations_by_type'][opt_type.value] = {
                     'count': len(type_recs),
                     'total_savings_kwh': sum(rec.impact_kwh for rec in type_recs),
-                    'total_cost_savings': sum(rec.cost_savings for rec in type_recs) * 12
+                    'total_cost_savings': sum(rec.cost_savings for rec in type_recs) * annualization_factor
                 }
         
         return report

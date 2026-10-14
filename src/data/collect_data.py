@@ -9,9 +9,10 @@ import logging
 from datetime import datetime, timedelta
 from pathlib import Path
 import sys
-sys.path.append('../..')
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from data_loader import EnergyDataLoader
+from src.data.data_loader import EnergyDataLoader
 
 logging.basicConfig(
     level=logging.INFO,

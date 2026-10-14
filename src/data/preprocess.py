@@ -5,7 +5,9 @@ Handles data cleaning, validation, and feature engineering.
 """
 
 import argparse
+import json
 import logging
+import pickle
 from pathlib import Path
 import pandas as pd
 import numpy as np
@@ -143,7 +145,7 @@ class DataPreprocessor:
         for col in numeric_cols:
             if df[col].isna().any():
                 df[col] = df.groupby('building_id')[col].transform(
-                    lambda x: x.fillna(method='ffill').fillna(method='bfill')
+                    lambda x: x.ffill().bfill()
                 )
         
         return df
@@ -176,8 +178,14 @@ class DataPreprocessor:
             'building': []
         }
         
+        # Columns computed from the target at the same timestamp. They are unknown at
+        # prediction time, so using them as features leaks the answer into the model.
+        leakage_columns = ['energy_intensity', 'peak_demand_kw']
+        
         for col in all_columns:
             if col in [feature_lists['target'], feature_lists['timestamp'], feature_lists['id']]:
+                continue
+            if col in leakage_columns:
                 continue
             
             # Categorize features
@@ -191,7 +199,7 @@ class DataPreprocessor:
                         'cooling_degree_days', 'discomfort_index']:
                 feature_lists['weather'].append(col)
             elif col in ['floor_area_sqm', 'year_built', 'energy_star_rating', 
-                        'building_age', 'energy_intensity', 'age_efficiency_factor']:
+                        'building_age', 'age_efficiency_factor']:
                 feature_lists['building'].append(col)
             elif '_encoded' in col:
                 feature_lists['categorical'].append(col)
@@ -237,9 +245,6 @@ class DataPreprocessor:
         feature_lists = self.create_feature_list(df)
         
         # Save feature information
-        import json
-        import pickle
-        
         feature_info_path = self.processed_dir / "feature_info.json"
         with open(feature_info_path, 'w') as f:
             json.dump(feature_lists, f, indent=2)

@@ -330,7 +330,7 @@ def format_currency(value: float, currency: str = "$") -> str:
 def format_energy(value: float, unit: str = "kWh") -> str:
     """Format energy value with appropriate unit."""
     if value >= 1000000:
-        return f"{value/1000000:.2f} MWh"
+        return f"{value/1000000:.2f} GWh"
     elif value >= 1000:
         return f"{value/1000:.2f} MWh"
     else:

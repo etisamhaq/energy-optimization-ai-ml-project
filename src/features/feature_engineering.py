@@ -62,15 +62,17 @@ class EnergyFeatureEngineer:
         for lag in lag_periods:
             df[f'{target_col}_lag_{lag}'] = df.groupby('building_id')[target_col].shift(lag)
         
-        # Rolling statistics with min_periods to avoid excessive NaN
+        # Rolling statistics with min_periods to avoid excessive NaN.
+        # Shifted by one step so the window only covers past values; including the
+        # current value would leak the target into its own features.
         for window in [24, 168]:  # Daily and weekly
             # Use smaller min_periods to keep more data
             min_periods = min(window // 4, 12)  # At least 1/4 of window or 12 hours
             df[f'{target_col}_rolling_mean_{window}'] = df.groupby('building_id')[target_col].transform(
-                lambda x: x.rolling(window, min_periods=min_periods).mean()
+                lambda x: x.shift(1).rolling(window, min_periods=min_periods).mean()
             )
             df[f'{target_col}_rolling_std_{window}'] = df.groupby('building_id')[target_col].transform(
-                lambda x: x.rolling(window, min_periods=min_periods).std()
+                lambda x: x.shift(1).rolling(window, min_periods=min_periods).std()
             )
         
         return df
@@ -97,7 +99,8 @@ class EnergyFeatureEngineer:
         """Create building efficiency metrics."""
         df = df.copy()
         
-        # Energy intensity (consumption per square meter)
+        # Energy intensity (consumption per square meter). Derived from the target,
+        # so it is for analysis only and must not be used as a model feature.
         df['energy_intensity'] = df['energy_consumption_kwh'] / df['floor_area_sqm']
         
         # Building age
@@ -203,7 +206,7 @@ class EnergyFeatureEngineer:
             'temperature_c', 'humidity_percent', 'heating_degree_days', 'cooling_degree_days',
             
             # Building features
-            'floor_area_sqm', 'building_age', 'energy_star_rating', 'energy_intensity',
+            'floor_area_sqm', 'building_age', 'energy_star_rating',
             
             # Encoded categorical features
             'building_type_encoded', 'hvac_type_encoded'

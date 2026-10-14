@@ -2,14 +2,12 @@
 FastAPI application for Energy Optimization ML API.
 """
 
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from contextlib import asynccontextmanager
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from typing import List, Optional, Dict
 from datetime import datetime, timedelta
-import pandas as pd
-import numpy as np
-from pathlib import Path
 import logging
 import sys
 import os
@@ -18,31 +16,72 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(
 from src.models.predict import EnergyPredictor
 from src.optimization.optimizer import EnergyOptimizer
 from src.data.data_loader import EnergyDataLoader
+from src.utils.helpers import validate_date_range
 
 # Configure logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"))
 logger = logging.getLogger(__name__)
 
-# Initialize FastAPI app
-app = FastAPI(
-    title="Energy Optimization ML API",
-    description="API for predicting building energy consumption and providing optimization recommendations",
-    version="1.0.0"
-)
-
-# Add CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+MAX_PREDICTION_DAYS = 365
+MAX_BUILDINGS_PER_REQUEST = 50
 
 # Initialize components
 predictor = EnergyPredictor()
 optimizer = EnergyOptimizer()
 data_loader = EnergyDataLoader()
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Preload the default model on startup so the first request isn't slow."""
+    try:
+        logger.info("Preloading models...")
+        predictor.load_latest_model("ensemble")
+        logger.info("Models preloaded successfully")
+    except Exception as e:
+        logger.warning(f"Could not preload ensemble model: {e}")
+    logger.info("Energy Optimization ML API started")
+    yield
+
+
+# Initialize FastAPI app
+app = FastAPI(
+    title="Energy Optimization ML API",
+    description="API for predicting building energy consumption and providing optimization recommendations",
+    version="1.0.0",
+    lifespan=lifespan
+)
+
+# Add CORS middleware. Set CORS_ORIGINS to a comma-separated list of allowed origins in production.
+cors_origins = [o.strip() for o in os.environ.get("CORS_ORIGINS", "*").split(",") if o.strip()]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=cors_origins,
+    allow_credentials="*" not in cors_origins,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+def _error_response(e: Exception, context: str) -> HTTPException:
+    """Map an exception to an HTTP error with an appropriate status code."""
+    if isinstance(e, HTTPException):
+        return e
+    if isinstance(e, FileNotFoundError):
+        logger.error(f"{context}: {e}")
+        return HTTPException(status_code=503, detail=f"Model or data not available: {e}")
+    if isinstance(e, (ValueError, KeyError)):
+        logger.warning(f"{context}: {e}")
+        return HTTPException(status_code=400, detail=str(e))
+    logger.exception(f"{context}: {e}")
+    return HTTPException(status_code=500, detail="Internal server error")
+
+
+def _validate_dates(start_date: str, end_date: str):
+    try:
+        return validate_date_range(start_date, end_date, MAX_PREDICTION_DAYS)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
 # Pydantic models for request/response
 class PredictionRequest(BaseModel):
@@ -52,8 +91,9 @@ class PredictionRequest(BaseModel):
     model_name: str = Field(default="ensemble", description="Model to use for prediction")
     include_optimization: bool = Field(default=False, description="Include optimization recommendations")
     
-    class Config:
-        schema_extra = {
+    model_config = ConfigDict(
+        protected_namespaces=(),
+        json_schema_extra={
             "example": {
                 "building_id": "B001",
                 "start_date": "2024-03-01",
@@ -62,10 +102,15 @@ class PredictionRequest(BaseModel):
                 "include_optimization": True
             }
         }
+    )
 
 
 class BatchPredictionRequest(BaseModel):
-    building_ids: List[str] = Field(..., description="List of building identifiers")
+    model_config = ConfigDict(protected_namespaces=())
+    
+    building_ids: List[str] = Field(
+        ..., min_length=1, max_length=MAX_BUILDINGS_PER_REQUEST, description="List of building identifiers"
+    )
     start_date: str = Field(..., description="Start date for prediction (YYYY-MM-DD)")
     end_date: str = Field(..., description="End date for prediction (YYYY-MM-DD)")
     model_name: str = Field(default="ensemble", description="Model to use for prediction")
@@ -97,8 +142,10 @@ class ModelComparisonRequest(BaseModel):
 
 class OptimizationRequest(BaseModel):
     building_id: str
-    analysis_period_days: int = Field(default=30, description="Days of historical data to analyze")
-    electricity_rate: float = Field(default=0.12, description="Cost per kWh in dollars")
+    analysis_period_days: int = Field(
+        default=30, ge=1, le=MAX_PREDICTION_DAYS, description="Days of historical data to analyze"
+    )
+    electricity_rate: float = Field(default=0.12, gt=0, description="Cost per kWh in dollars")
 
 
 # API endpoints
@@ -129,18 +176,10 @@ async def health_check():
 
 
 @app.post("/predict", response_model=PredictionResponse)
-async def predict_energy(request: PredictionRequest):
+def predict_energy(request: PredictionRequest):
     """Predict energy consumption for a building."""
     try:
-        # Validate dates
-        start_date = datetime.strptime(request.start_date, "%Y-%m-%d")
-        end_date = datetime.strptime(request.end_date, "%Y-%m-%d")
-        
-        if end_date < start_date:
-            raise HTTPException(status_code=400, detail="End date must be after start date")
-        
-        if (end_date - start_date).days > 365:
-            raise HTTPException(status_code=400, detail="Prediction period cannot exceed 365 days")
+        _validate_dates(request.start_date, request.end_date)
         
         # Make predictions
         predictions_df, daily_totals = predictor.predict_range(
@@ -184,14 +223,14 @@ async def predict_energy(request: PredictionRequest):
         )
         
     except Exception as e:
-        logger.error(f"Prediction error: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise _error_response(e, "Prediction error")
 
 
 @app.post("/predict/batch")
-async def batch_predict(request: BatchPredictionRequest):
+def batch_predict(request: BatchPredictionRequest):
     """Make predictions for multiple buildings."""
     try:
+        _validate_dates(request.start_date, request.end_date)
         results = []
         
         for building_id in request.building_ids:
@@ -218,14 +257,14 @@ async def batch_predict(request: BatchPredictionRequest):
         }
         
     except Exception as e:
-        logger.error(f"Batch prediction error: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise _error_response(e, "Batch prediction error")
 
 
 @app.post("/compare")
-async def compare_models(request: ModelComparisonRequest):
+def compare_models(request: ModelComparisonRequest):
     """Compare predictions from multiple models."""
     try:
+        _validate_dates(request.start_date, request.end_date)
         comparison_df = predictor.compare_models(
             request.building_id,
             request.start_date,
@@ -258,12 +297,11 @@ async def compare_models(request: ModelComparisonRequest):
         }
         
     except Exception as e:
-        logger.error(f"Model comparison error: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise _error_response(e, "Model comparison error")
 
 
 @app.post("/optimize")
-async def optimize_energy(request: OptimizationRequest):
+def optimize_energy(request: OptimizationRequest):
     """Generate optimization recommendations for a building."""
     try:
         # Get recent predictions for analysis
@@ -300,12 +338,11 @@ async def optimize_energy(request: OptimizationRequest):
         }
         
     except Exception as e:
-        logger.error(f"Optimization error: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise _error_response(e, "Optimization error")
 
 
 @app.get("/buildings")
-async def list_buildings():
+def list_buildings():
     """List available buildings."""
     try:
         # Get sample building IDs
@@ -320,8 +357,7 @@ async def list_buildings():
         return {"buildings": buildings}
         
     except Exception as e:
-        logger.error(f"Error listing buildings: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise _error_response(e, "Error listing buildings")
 
 
 @app.get("/models")
@@ -368,27 +404,11 @@ async def list_models():
     }
 
 
-# Background task for model preloading
-async def preload_models():
-    """Preload models in background."""
-    try:
-        logger.info("Preloading models...")
-        predictor.load_latest_model("ensemble")
-        logger.info("Models preloaded successfully")
-    except Exception as e:
-        logger.error(f"Error preloading models: {str(e)}")
-
-
-@app.on_event("startup")
-async def startup_event():
-    """Run on application startup."""
-    # Schedule model preloading
-    background_tasks = BackgroundTasks()
-    background_tasks.add_task(preload_models)
-    
-    logger.info("Energy Optimization ML API started")
+def main():
+    """Run the API server."""
+    import uvicorn
+    uvicorn.run(app, host=os.environ.get("API_HOST", "0.0.0.0"), port=int(os.environ.get("API_PORT", "8000")))
 
 
 if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    main()

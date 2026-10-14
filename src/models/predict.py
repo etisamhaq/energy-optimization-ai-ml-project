@@ -17,10 +17,10 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(
 
 from src.models import (
     XGBoostModel, LightGBMModel, RandomForestModel,
-    ProphetModel, ARIMAModel, LSTMModel, EnsembleModel
+    ProphetModel, ARIMAModel, EnsembleModel, lstm_model
 )
 from src.features.feature_engineering import EnergyFeatureEngineer
-from src.data.data_loader import EnergyDataLoader
+from src.data.data_loader import EnergyDataLoader, hourly_range
 
 logging.basicConfig(
     level=logging.INFO,
@@ -48,7 +48,7 @@ class EnergyPredictor:
             'random_forest': RandomForestModel,
             'prophet': ProphetModel,
             'arima': ARIMAModel,
-            'lstm': LSTMModel,
+            'lstm': lstm_model,
             'ensemble': EnsembleModel
         }
     
@@ -109,10 +109,8 @@ class EnergyPredictor:
         """Prepare data for prediction."""
         logger.info(f"Preparing prediction data for building {building_id} from {start_date} to {end_date}")
         
-        # Generate timestamp range
-        start = pd.to_datetime(start_date)
-        end = pd.to_datetime(end_date)
-        timestamps = pd.date_range(start=start, end=end, freq='H')
+        # Generate timestamp range (every hour of every day in the range)
+        timestamps = hourly_range(start_date, end_date)
         
         # Create base dataframe
         prediction_df = pd.DataFrame({
@@ -247,7 +245,7 @@ class EnergyPredictor:
                 logger.error(f"Error with {model_name}: {e}")
         
         if not comparison_results:
-            raise ValueError("No models produced predictions")
+            raise FileNotFoundError(f"None of the requested models produced predictions: {models}")
         
         # Combine results
         comparison_df = comparison_results[0][['timestamp', 'building_id']].copy()

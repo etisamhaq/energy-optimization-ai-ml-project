@@ -4,11 +4,19 @@ from pathlib import Path
 from typing import Dict, List, Optional, Union
 import requests
 import json
+import zlib
 from datetime import datetime, timedelta
 import logging
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+def hourly_range(start_date: str, end_date: str) -> pd.DatetimeIndex:
+    """Hourly timestamps covering every hour from start_date through end_date (inclusive)."""
+    start = pd.to_datetime(start_date).normalize()
+    end = pd.to_datetime(end_date).normalize() + pd.Timedelta(hours=23)
+    return pd.date_range(start=start, end=end, freq='H')
 
 
 class EnergyDataLoader:
@@ -45,17 +53,19 @@ class EnergyDataLoader:
     
     def load_building_metadata(self, building_ids: List[str]) -> pd.DataFrame:
         """Load building characteristics and metadata."""
-        # Generate synthetic building metadata
+        # Generate synthetic building metadata, seeded by building ID so the same
+        # building always gets the same characteristics across calls and processes
         metadata = []
         for building_id in building_ids:
+            rng = np.random.default_rng(zlib.crc32(str(building_id).encode()))
             metadata.append({
                 'building_id': building_id,
-                'building_type': np.random.choice(['office', 'residential', 'retail', 'industrial']),
-                'floor_area_sqm': np.random.randint(1000, 50000),
-                'year_built': np.random.randint(1970, 2020),
-                'occupancy_type': np.random.choice(['single_tenant', 'multi_tenant']),
-                'hvac_type': np.random.choice(['central', 'distributed', 'hybrid']),
-                'energy_star_rating': np.random.randint(1, 100)
+                'building_type': rng.choice(['office', 'residential', 'retail', 'industrial']),
+                'floor_area_sqm': int(rng.integers(1000, 50000)),
+                'year_built': int(rng.integers(1970, 2020)),
+                'occupancy_type': rng.choice(['single_tenant', 'multi_tenant']),
+                'hvac_type': rng.choice(['central', 'distributed', 'hybrid']),
+                'energy_star_rating': int(rng.integers(1, 100))
             })
         
         return pd.DataFrame(metadata)
@@ -87,7 +97,10 @@ class EnergyDataLoader:
         """Generate synthetic energy consumption data for testing."""
         data = []
         
-        start_date = datetime.now() - timedelta(days=n_days)
+        # Start at midnight so timestamps fall exactly on the hour and line up with weather data
+        start_date = (datetime.now() - timedelta(days=n_days)).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
         
         for building_id in [f"B{str(i).zfill(3)}" for i in range(1, n_buildings + 1)]:
             base_consumption = np.random.uniform(100, 500)  # Base kWh
@@ -123,10 +136,7 @@ class EnergyDataLoader:
     
     def _generate_synthetic_weather_data(self, start_date: str, end_date: str) -> pd.DataFrame:
         """Generate synthetic weather data for testing."""
-        start = pd.to_datetime(start_date)
-        end = pd.to_datetime(end_date)
-        
-        date_range = pd.date_range(start=start, end=end, freq='H')
+        date_range = hourly_range(start_date, end_date)
         
         data = []
         for timestamp in date_range:

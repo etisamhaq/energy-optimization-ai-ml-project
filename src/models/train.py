@@ -20,7 +20,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(
 
 from src.models import (
     XGBoostModel, LightGBMModel, RandomForestModel,
-    ProphetModel, ARIMAModel, LSTMModel, EnsembleModel
+    ProphetModel, ARIMAModel, EnsembleModel, lstm_model
 )
 
 logging.basicConfig(
@@ -48,7 +48,7 @@ class ModelTrainer:
             'random_forest': RandomForestModel,
             'prophet': ProphetModel,
             'arima': ARIMAModel,
-            'lstm': LSTMModel,
+            'lstm': lstm_model,
             'ensemble': EnsembleModel
         }
     

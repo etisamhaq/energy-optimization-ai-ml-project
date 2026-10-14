@@ -29,8 +29,7 @@ class XGBoostModel(BaseEnergyModel):
             'reg_lambda': 1,
             'objective': 'reg:squarederror',
             'n_jobs': -1,
-            'random_state': 42,
-            'early_stopping_rounds': 50
+            'random_state': 42
         }
         if model_params:
             default_params.update(model_params)
@@ -41,10 +40,12 @@ class XGBoostModel(BaseEnergyModel):
         """Fit XGBoost model."""
         self.feature_names = X.columns.tolist()
         
-        # Initialize model
-        self.model = xgb.XGBRegressor(**self.model_params)
+        # Early stopping needs a validation set, so only enable it when one is given
+        params = dict(self.model_params)
+        if eval_set is not None:
+            params.setdefault('early_stopping_rounds', early_stopping_rounds)
+        self.model = xgb.XGBRegressor(**params)
         
-        # Fit model - XGBoost fit() doesn't accept early_stopping_rounds directly
         if eval_set is not None:
             self.model.fit(
                 X, y, 
@@ -179,8 +180,7 @@ class LinearRegressionModel(BaseEnergyModel):
     
     def __init__(self, model_params: Optional[Dict] = None):
         default_params = {
-            'fit_intercept': True,
-            'normalize': False
+            'fit_intercept': True
         }
         if model_params:
             default_params.update(model_params)
@@ -220,7 +220,6 @@ class RidgeModel(BaseEnergyModel):
         default_params = {
             'alpha': 1.0,
             'fit_intercept': True,
-            'normalize': False,
             'random_state': 42
         }
         if model_params:

@@ -11,9 +11,14 @@ import logging
 from .base_model import BaseEnergyModel
 from .time_series_models import ProphetModel, ARIMAModel
 from .ml_models import XGBoostModel, LightGBMModel, RandomForestModel
-from .deep_learning_models import LSTMModel
 
 logger = logging.getLogger(__name__)
+
+
+def lstm_model(model_params: Optional[Dict] = None):
+    """Build an LSTMModel, importing TensorFlow/PyTorch only when LSTM is actually used."""
+    from .deep_learning_models import LSTMModel
+    return LSTMModel(model_params)
 
 
 class EnsembleModel(BaseEnergyModel):
@@ -47,7 +52,7 @@ class EnsembleModel(BaseEnergyModel):
             'random_forest': RandomForestModel,
             'prophet': ProphetModel,
             'arima': ARIMAModel,
-            'lstm': LSTMModel
+            'lstm': lstm_model
         }
         
         for model_name in self.model_names:
