@@ -7,4 +7,4 @@ deep-learning dependencies.
 """
 
 __version__ = "1.0.0"
-__author__ = "Energy ML Team"
+__author__ = "Etisam Ul Haq"

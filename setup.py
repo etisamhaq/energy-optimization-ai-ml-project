@@ -8,13 +8,13 @@ with open("README.md", "r", encoding="utf-8") as fh:
     long_description = fh.read()
 
 with open("requirements-docker.txt", "r", encoding="utf-8") as fh:
-    requirements = [line.strip() for line in fh if line.strip() and not line.startswith(("#", "-r"))]
+    requirements = [line.split("#")[0].strip() for line in fh]
+    requirements = [r for r in requirements if r and not r.startswith("-r")]
 
 setup(
     name="energy-optimization-ml",
     version="1.0.0",
-    author="Energy ML Team",
-    author_email="energy-ml@example.com",
+    author="Etisam Ul Haq",
     description="Advanced ML system for building energy optimization",
     long_description=long_description,
     long_description_content_type="text/markdown",
@@ -27,10 +27,9 @@ setup(
         "Topic :: Scientific/Engineering :: Artificial Intelligence",
         "License :: OSI Approved :: MIT License",
         "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: 3.10",
     ],
-    python_requires=">=3.9",
+    python_requires=">=3.10",
     install_requires=requirements,
     extras_require={
         "dl": ["tensorflow==2.13.0", "torch==2.0.1", "pytorch-lightning==2.0.6"],

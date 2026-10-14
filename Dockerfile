@@ -1,5 +1,5 @@
 # Multi-stage build for Energy Optimization ML
-FROM python:3.9-slim AS builder
+FROM python:3.10-slim-bookworm AS builder
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
@@ -12,13 +12,13 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 # Copy requirements first for better caching
-COPY requirements-docker.txt ./
+COPY requirements-docker.txt constraints.txt ./
 
 # Install Python dependencies
-RUN pip install --no-cache-dir --user -r requirements-docker.txt
+RUN pip install --no-cache-dir --user -r requirements-docker.txt -c constraints.txt
 
 # Production stage
-FROM python:3.9-slim
+FROM python:3.10-slim-bookworm
 
 # Install runtime dependencies
 RUN apt-get update && apt-get install -y \

@@ -7,7 +7,10 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - LOG_LEVEL=INFO
-      - CORS_ORIGINS=http://localhost:8501
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:8501}
+      # Required: comma-separated API keys clients send in the X-API-Key header (see .env.example)
+      - API_KEYS=${API_KEYS:?Set API_KEYS in .env (see .env.example)}
+      - RATE_LIMIT_PER_MINUTE=${RATE_LIMIT_PER_MINUTE:-60}
     volumes:
       - ./data:/app/data
       - ./models:/app/models
@@ -22,8 +25,10 @@ services:
   dashboard:
     build: .
     container_name: energy-optimization-dashboard
+    # The dashboard has no login: it is bound to localhost only. Put it behind an
+    # authenticating reverse proxy before exposing it to other machines.
     ports:
-      - "8501:8501"
+      - "127.0.0.1:8501:8501"
     environment:
       - PYTHONUNBUFFERED=1
     volumes:
@@ -36,10 +41,11 @@ services:
 
   # Optional: MLflow tracking server
   mlflow:
-    image: python:3.9-slim
+    image: python:3.10-slim-bookworm
     container_name: energy-optimization-mlflow
+    # MLflow has no authentication either, so it is bound to localhost only
     ports:
-      - "5000:5000"
+      - "127.0.0.1:5000:5000"
     volumes:
       - ./mlruns:/mlruns
       - ./mlflow-artifacts:/mlflow-artifacts
