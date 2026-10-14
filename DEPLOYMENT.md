@@ -10,7 +10,7 @@
 
 ## Prerequisites
 
-- Python 3.8 or higher
+- Python 3.10 or higher
 - Docker and Docker Compose (for containerized deployment)
 - 8GB RAM minimum (16GB recommended for training)
 - 10GB free disk space
@@ -153,24 +153,14 @@ az container create \
 ## Production Considerations
 
 ### 1. Environment Variables
-Create a `.env` file for production:
+Copy `.env.example` to `.env` and fill it in:
 ```env
-# API Configuration
-API_HOST=0.0.0.0
-API_PORT=8000
-API_WORKERS=4
-
-# Database (if using external DB)
-DATABASE_URL=postgresql://user:password@host:port/dbname
-
-# Security
-SECRET_KEY=your-secret-key-here
-API_KEY=your-api-key-here
-
-# Monitoring
-ENABLE_METRICS=true
+API_KEYS=<comma-separated keys>      # required by docker-compose
+CORS_ORIGINS=https://your-dashboard.example.com
+RATE_LIMIT_PER_MINUTE=60
 LOG_LEVEL=INFO
 ```
+Generate a key with `python3 -c "import secrets; print(secrets.token_urlsafe(32))"`.
 
 ### 2. SSL/TLS Configuration
 Use a reverse proxy (nginx) for SSL:
@@ -190,15 +180,10 @@ server {
 }
 ```
 
-### 3. Database Setup
-For production, use PostgreSQL:
-```sql
-CREATE DATABASE energy_optimization;
-CREATE USER energy_user WITH PASSWORD 'secure_password';
-GRANT ALL PRIVILEGES ON DATABASE energy_optimization TO energy_user;
-```
+Behind a reverse proxy, run uvicorn with `--proxy-headers --forwarded-allow-ips=<proxy IP>` so rate limiting sees client IPs, not the proxy's.
 
-### 4. Scaling Considerations
+### 3. Scaling Considerations
+- The rate limit is per API process; enforce a global limit at the load balancer when running several replicas
 - Use Redis for caching predictions
 - Implement load balancing for multiple API instances
 - Use S3 or similar for model storage
@@ -209,7 +194,9 @@ GRANT ALL PRIVILEGES ON DATABASE energy_optimization TO energy_user;
 ### 1. Health Checks
 ```bash
 # API health check
-curl http://localhost:8000/health
+curl http://localhost:8000/health   # liveness
+curl http://localhost:8000/ready    # 503 until a trained model can be loaded
+curl http://localhost:8000/metrics  # Prometheus scrape target
 ```
 
 ### 2. Log Management

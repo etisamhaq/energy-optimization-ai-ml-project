@@ -1,4 +1,4 @@
-.PHONY: help setup install install-dl clean test test-file lint format collect-data preprocess train train-single predict run-api run-dashboard run-mlflow docker-build docker-up docker-down docker-logs pipeline dev deploy
+.PHONY: help setup install install-dl clean test test-file lint format collect-data collect-real preprocess train train-single predict run-api run-dashboard run-mlflow docker-build docker-up docker-down docker-logs pipeline dev deploy
 
 # Default target
 help:
@@ -10,7 +10,8 @@ help:
 	@echo "  make test           - Run tests"
 	@echo "  make lint           - Run linting"
 	@echo "  make format         - Format code"
-	@echo "  make collect-data   - Collect initial data"
+	@echo "  make collect-data   - Generate synthetic demo data"
+	@echo "  make collect-real   - Download real BDG2 meter data + Open-Meteo weather"
 	@echo "  make preprocess     - Preprocess collected data"
 	@echo "  make train          - Train models"
 	@echo "  make run-api        - Run FastAPI server"
@@ -29,7 +30,7 @@ setup:
 # Install dependencies
 install:
 	pip install --upgrade pip
-	pip install -r requirements.txt
+	pip install -r requirements.txt -c constraints.txt
 	pip install -e .
 
 install-dl:
@@ -65,7 +66,10 @@ format:
 
 # Data pipeline
 collect-data:
-	python src/data/collect_data.py --source all --n-buildings 10 --n-days 365
+	python src/data/collect_data.py --source synthetic --n-buildings 10 --n-days 365
+
+collect-real:
+	python src/data/collect_data.py --source bdg2 --site Rat --n-buildings 10
 
 preprocess:
 	python src/data/preprocess.py
@@ -75,12 +79,12 @@ train:
 	python src/models/train.py --model ensemble
 
 train-single:
-	@read -p "Enter model name (xgboost/lightgbm/random_forest/prophet): " model; \
+	@read -p "Enter model name (xgboost/lightgbm/random_forest): " model; \
 	python src/models/train.py --model $$model
 
 # Predictions
 predict:
-	python src/models/predict.py --building-id B001 --model ensemble
+	python src/models/predict.py --model ensemble
 
 # Run services
 run-api:
