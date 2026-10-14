@@ -3,6 +3,7 @@ Tests for FastAPI endpoints.
 """
 
 import pytest
+from datetime import date, timedelta
 from fastapi.testclient import TestClient
 
 import src.api.main as api_main
@@ -40,6 +41,11 @@ def monkeypatch_module():
         yield mp
 
 
+# The pipeline fixture generates history up to yesterday, so forecast from today
+TODAY = date.today().isoformat()
+TOMORROW = (date.today() + timedelta(days=1)).isoformat()
+
+
 class TestAPI:
     """Test cases for API endpoints."""
     
@@ -71,8 +77,8 @@ class TestAPI:
         """Test basic prediction endpoint."""
         request_data = {
             "building_id": "B001",
-            "start_date": "2024-03-01",
-            "end_date": "2024-03-02",
+            "start_date": TODAY,
+            "end_date": TOMORROW,
             "model_name": "ensemble",
             "include_optimization": False
         }
@@ -90,8 +96,8 @@ class TestAPI:
         """Test prediction endpoint with optimization."""
         request_data = {
             "building_id": "B001",
-            "start_date": "2024-03-01",
-            "end_date": "2024-03-02",
+            "start_date": TODAY,
+            "end_date": TOMORROW,
             "model_name": "ensemble",
             "include_optimization": True
         }
@@ -115,6 +121,31 @@ class TestAPI:
         response = client.post("/predict", json=request_data)
         assert response.status_code == 400
         assert "End date must be after start date" in response.json()["detail"]
+    
+    def test_predictions_track_building_history(self, client, trained_predictor):
+        """Forecasts should be on the scale of the building's observed consumption."""
+        response = client.post("/predict", json={
+            "building_id": "B001",
+            "start_date": TODAY,
+            "end_date": TOMORROW,
+            "model_name": "xgboost"
+        })
+        assert response.status_code == 200
+        
+        predicted_mean = response.json()["summary"]["average_hourly_kwh"]
+        observed_mean = trained_predictor.load_consumption_history("B001").iloc[-168:].mean()
+        assert 0.5 * observed_mean < predicted_mean < 1.5 * observed_mean
+    
+    def test_predict_endpoint_without_history(self, client, trained_predictor):
+        """Dates before any observed consumption can't be forecast and are rejected."""
+        response = client.post("/predict", json={
+            "building_id": "B001",
+            "start_date": "2000-01-01",
+            "end_date": "2000-01-02",
+            "model_name": "xgboost"
+        })
+        assert response.status_code == 400
+        assert "history" in response.json()["detail"]
     
     def test_predict_endpoint_without_trained_model(self, client, monkeypatch, tmp_path):
         """Missing models should be reported as service unavailable, not a server crash."""
@@ -141,8 +172,8 @@ class TestAPI:
         """Test batch prediction endpoint."""
         request_data = {
             "building_ids": ["B001", "B002", "B003"],
-            "start_date": "2024-03-01",
-            "end_date": "2024-03-02",
+            "start_date": TODAY,
+            "end_date": TOMORROW,
             "model_name": "ensemble"
         }
         
@@ -158,8 +189,8 @@ class TestAPI:
         """Test model comparison endpoint."""
         request_data = {
             "building_id": "B001",
-            "start_date": "2024-03-01",
-            "end_date": "2024-03-02",
+            "start_date": TODAY,
+            "end_date": TOMORROW,
             "models": ["xgboost", "lightgbm"]
         }
         

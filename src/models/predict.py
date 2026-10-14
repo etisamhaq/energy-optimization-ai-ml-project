@@ -5,6 +5,7 @@ Prediction script for Energy Optimization ML models.
 
 import argparse
 import logging
+import re
 from pathlib import Path
 import pandas as pd
 import numpy as np
@@ -28,6 +29,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Model features computed from past consumption, e.g. energy_consumption_kwh_lag_24
+TARGET_HISTORY_FEATURE = re.compile(r'energy_consumption_kwh_(lag|rolling_mean|rolling_std)_(\d+)')
+
 
 class EnergyPredictor:
     """Handles energy consumption predictions."""
@@ -38,6 +42,7 @@ class EnergyPredictor:
         self.processed_dir = self.data_dir / "processed"
         
         self.loaded_models = {}
+        self._history_cache = {}
         self.feature_engineer = self._load_feature_engineer()
         self.data_loader = EnergyDataLoader(data_dir)
         
@@ -80,8 +85,21 @@ class EnergyPredictor:
             model = model_class()
             model.load_model(str(latest_file))
         
+        self._use_single_thread(model)
         self.loaded_models[model_name] = model
         return model
+    
+    @staticmethod
+    def _use_single_thread(model):
+        """
+        Recursive forecasting predicts one row at a time, where spinning up a thread
+        pool per call (n_jobs=-1) costs far more than the prediction itself.
+        """
+        sub_models = model.models.values() if isinstance(model, EnsembleModel) else [model]
+        for sub_model in sub_models:
+            estimator = getattr(sub_model, 'model', None)
+            if estimator is not None and 'n_jobs' in getattr(estimator, 'get_params', dict)():
+                estimator.set_params(n_jobs=1)
     
     def load_feature_info(self) -> Dict:
         """Load feature information."""
@@ -132,89 +150,131 @@ class EnergyPredictor:
         prediction_df = pd.merge(prediction_df, weather_data, on='timestamp', how='left')
         prediction_df = pd.merge(prediction_df, building_metadata, on='building_id', how='left')
         
-        # Add placeholder for historical consumption (needed for lag features)
-        # In production, this would come from actual historical data
-        prediction_df['energy_consumption_kwh'] = 0  # Will be updated with predictions
-        
+        # Consumption is unknown in the forecast window; lag features are filled in
+        # from history and earlier predictions by predict_range
+        prediction_df['energy_consumption_kwh'] = np.nan
+
         return prediction_df
-    
-    def predict_single_timestep(self, model: any, features: pd.DataFrame) -> float:
-        """Make prediction for a single timestep."""
-        prediction = model.predict(features)
-        return prediction[0] if isinstance(prediction, np.ndarray) else prediction
-    
+
+    def load_consumption_history(self, building_id: str) -> pd.Series:
+        """
+        Load observed hourly consumption for a building, indexed by timestamp.
+
+        Reads the latest integrated dataset produced by collect_data.py. In production,
+        replace this with a query against the metered-consumption store.
+        """
+        history_files = list(self.processed_dir.glob("integrated_data_*.csv"))
+        if not history_files:
+            raise FileNotFoundError("No consumption history found. Run collect_data.py first.")
+
+        latest_file = max(history_files, key=lambda f: f.stat().st_mtime)
+        if self._history_cache.get('file') != latest_file:
+            df = pd.read_csv(latest_file, usecols=['building_id', 'timestamp', 'energy_consumption_kwh'])
+            df['timestamp'] = pd.to_datetime(df['timestamp'])
+            self._history_cache = {'file': latest_file, 'data': df}
+
+        df = self._history_cache['data']
+        history = df[df['building_id'] == building_id].set_index('timestamp')['energy_consumption_kwh']
+        return history.sort_index()
+
+    @staticmethod
+    def _target_history_features(values: List[float], feature_cols: List[str]) -> Dict[str, float]:
+        """Compute lag/rolling target features from the consumption values seen so far."""
+        features = {}
+        for col in feature_cols:
+            match = TARGET_HISTORY_FEATURE.fullmatch(col)
+            if not match:
+                continue
+            kind, n = match.group(1), int(match.group(2))
+            if kind == 'lag':
+                features[col] = values[-n]
+            elif kind == 'rolling_mean':
+                features[col] = float(np.mean(values[-n:]))
+            else:
+                features[col] = float(np.std(values[-n:], ddof=1))
+        return features
+
     def predict_range(self, building_id: str, start_date: str, end_date: str,
                      model_name: str = 'ensemble', use_actual_weather: bool = False) -> pd.DataFrame:
-        """Predict energy consumption for a date range."""
+        """
+        Predict hourly energy consumption for every hour from start_date through end_date.
+
+        Feature-based models forecast recursively: lag and rolling features come from
+        observed consumption before start_date, then from the model's own predictions.
+        """
         # Load model if not already loaded
         if model_name not in self.loaded_models:
             self.load_latest_model(model_name)
-        
+
         model = self.loaded_models[model_name]
-        
-        # Prepare prediction data
-        base_df = self.prepare_prediction_data(
-            building_id, start_date, end_date, use_actual_weather
-        )
-        
-        # Apply feature engineering
-        prediction_df = self.feature_engineer.create_all_features(base_df)
-        
-        # Get feature columns
+
         feature_info = self.load_feature_info()
         feature_cols = feature_info['all_features']
-        
-        # For time series models, we need to predict sequentially
-        predictions = []
-        
-        if model_name in ['prophet', 'arima', 'lstm']:
-            # These models need special handling
-            # For simplicity, we'll use the model's predict method directly
-            available_features = [col for col in feature_cols if col in prediction_df.columns]
-            X = prediction_df[available_features]
-            
-            try:
-                pred_values = model.predict(X)
-                predictions = pred_values
-            except Exception as e:
-                logger.warning(f"Error with {model_name} prediction: {e}")
-                # Fallback to simple prediction
-                predictions = np.full(len(prediction_df), 150.0)  # Default value
+        start = pd.to_datetime(start_date).normalize()
+
+        if model_name in ['prophet', 'arima']:
+            # Pure time-series models forecast from timestamps alone
+            prediction_df = self.prepare_prediction_data(building_id, start_date, end_date, use_actual_weather)
+            predictions = np.asarray(model.predict(prediction_df[['timestamp']]))
         else:
-            # For ML models, we can predict all at once
-            # Filter to available features
-            available_features = [col for col in feature_cols if col in prediction_df.columns]
-            X = prediction_df[available_features]
-            
-            # Fill missing features with 0
-            for col in feature_cols:
-                if col not in X.columns:
-                    X[col] = 0
-            
-            # Ensure correct feature order
-            X = X[feature_cols]
-            
-            predictions = model.predict(X)
-        
+            history = self.load_consumption_history(building_id)
+            history = history[history.index < start]
+            max_lookback = max(
+                [int(TARGET_HISTORY_FEATURE.fullmatch(c).group(2)) for c in feature_cols
+                 if TARGET_HISTORY_FEATURE.fullmatch(c)],
+                default=1
+            )
+            if len(history) < max_lookback:
+                raise ValueError(
+                    f"Building {building_id} needs at least {max_lookback} hours of consumption "
+                    f"history before {start.date()}, found {len(history)}"
+                )
+
+            # Forecast from the end of observed history, so any gap up to start_date is bridged
+            forecast_start = history.index.max() + pd.Timedelta(hours=1)
+            base_df = self.prepare_prediction_data(
+                building_id, forecast_start.strftime('%Y-%m-%d'), end_date, use_actual_weather
+            )
+            base_df = base_df[base_df['timestamp'] >= forecast_start].reset_index(drop=True)
+
+            # Non-target features (time, weather, building) are known in advance
+            featured = self.feature_engineer.create_all_features(base_df).reset_index(drop=True)
+            # Fill gaps (e.g. the first hour's weather change) the same way preprocessing does
+            X = featured.reindex(columns=feature_cols).ffill().bfill()
+
+            values = history.iloc[-max_lookback:].tolist()
+            predictions = []
+            for i in range(len(X)):
+                row = X.iloc[[i]].copy()
+                for col, value in self._target_history_features(values, feature_cols).items():
+                    row[col] = value
+                prediction = max(float(np.asarray(model.predict(row))[0]), 0.0)
+                predictions.append(prediction)
+                values.append(prediction)
+
+            prediction_df = featured.assign(predicted=predictions)
+            prediction_df = prediction_df[prediction_df['timestamp'] >= start]
+            predictions = prediction_df['predicted'].to_numpy()
+
         # Create results dataframe
         results_df = pd.DataFrame({
-            'timestamp': prediction_df['timestamp'],
+            'timestamp': prediction_df['timestamp'].to_numpy(),
             'building_id': building_id,
             'predicted_consumption_kwh': predictions,
             'model': model_name
         })
-        
+
         # Add additional useful information
         results_df['hour'] = results_df['timestamp'].dt.hour
         results_df['day_of_week'] = results_df['timestamp'].dt.day_name()
         results_df['date'] = results_df['timestamp'].dt.date
-        
+
         # Calculate daily totals
         daily_totals = results_df.groupby('date')['predicted_consumption_kwh'].sum().reset_index()
         daily_totals.columns = ['date', 'daily_total_kwh']
-        
+
         return results_df, daily_totals
-    
+
     def predict_multiple_buildings(self, building_ids: List[str], start_date: str, 
                                  end_date: str, model_name: str = 'ensemble') -> pd.DataFrame:
         """Make predictions for multiple buildings."""

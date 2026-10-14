@@ -150,10 +150,19 @@ streamlit run src/visualization/dashboard.py
 
 ## Performance Metrics
 
-- Mean Absolute Percentage Error (MAPE): < 5.2%
-- R² Score: > 0.92
-- Peak Load Prediction Accuracy: 95%
-- Energy Savings Achievement: 15-30%
+Measured on the bundled synthetic dataset (3 buildings, 60 days, ~10% random noise per hour),
+forecasting 48 held-out hours recursively from history:
+
+| Model | MAPE |
+|-------|------|
+| XGBoost | 8–12% |
+| Ensemble (XGBoost + LightGBM + Random Forest) | 8–12% |
+| Naive baseline (same hour last week) | 10–13% |
+
+These numbers describe the synthetic data only. Re-measure on real meter data before quoting accuracy.
+
+Predictions need at least one week of hourly consumption history before the start date
+(lag and rolling features); the API returns HTTP 400 when it is missing.
 
 ## Real-World Impact
 
