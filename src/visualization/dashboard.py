@@ -17,7 +17,11 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(
 
 from src.models.predict import EnergyPredictor
 from src.optimization.optimizer import EnergyOptimizer, OptimizationType
-from src.data.data_loader import EnergyDataLoader
+
+def format_months(months):
+    """Format a payback period, which is None when a measure never pays back."""
+    return "n/a" if months is None else f"{months:.1f} months"
+
 
 # Page configuration
 st.set_page_config(
@@ -54,11 +58,14 @@ st.markdown("""
 
 # Initialize session state
 if 'predictor' not in st.session_state:
-    st.session_state.predictor = EnergyPredictor()
+    st.session_state.predictor = EnergyPredictor(
+        models_dir=os.environ.get("MODELS_DIR", "models"),
+        data_dir=os.environ.get("DATA_DIR", "data")
+    )
 if 'optimizer' not in st.session_state:
     st.session_state.optimizer = EnergyOptimizer()
 if 'data_loader' not in st.session_state:
-    st.session_state.data_loader = EnergyDataLoader()
+    st.session_state.data_loader = st.session_state.predictor.data_loader
 
 # Header
 st.markdown("<h1 class='main-header'>⚡ Energy Optimization Dashboard</h1>", unsafe_allow_html=True)
@@ -67,25 +74,29 @@ st.markdown("<h1 class='main-header'>⚡ Energy Optimization Dashboard</h1>", un
 with st.sidebar:
     st.header("Configuration")
     
-    # Building selection
-    building_ids = [f"B{str(i).zfill(3)}" for i in range(1, 11)]
+    # Building selection (buildings from the collected dataset)
+    building_ids = st.session_state.data_loader.list_buildings()
+    if not building_ids:
+        st.error("No buildings found. Run the data pipeline first (make pipeline).")
+        st.stop()
     selected_building = st.selectbox("Select Building", building_ids)
+    
+    # Default to forecasting the week after the building's last observed reading
+    try:
+        last_observed = st.session_state.predictor.load_consumption_history(selected_building).index.max()
+    except FileNotFoundError:
+        last_observed = pd.Timestamp(datetime.now())
+    default_start = (last_observed + timedelta(days=1)).date()
     
     # Date range selection
     col1, col2 = st.columns(2)
     with col1:
-        start_date = st.date_input(
-            "Start Date",
-            value=datetime.now() - timedelta(days=7)
-        )
+        start_date = st.date_input("Start Date", value=default_start)
     with col2:
-        end_date = st.date_input(
-            "End Date",
-            value=datetime.now() + timedelta(days=7)
-        )
+        end_date = st.date_input("End Date", value=default_start + timedelta(days=6))
     
     # Model selection
-    model_options = ['ensemble', 'xgboost', 'lightgbm', 'random_forest', 'prophet']
+    model_options = ['ensemble', 'xgboost', 'lightgbm', 'random_forest']
     selected_model = st.selectbox("Prediction Model", model_options)
     
     # Electricity rate
@@ -283,7 +294,7 @@ if 'predictions_df' in st.session_state:
         with col3:
             st.metric(
                 "Average Payback",
-                f"{summary['average_payback_months']:.1f} months"
+                format_months(summary['average_payback_months'])
             )
         
         # Recommendations by type
@@ -311,16 +322,16 @@ if 'predictions_df' in st.session_state:
                 col1, col2, col3 = st.columns(3)
                 
                 with col1:
-                    st.metric("Energy Savings", f"{rec['impact_kwh']:,.0f} kWh")
+                    st.metric("Energy Savings (period)", f"{rec['impact_kwh']:,.0f} kWh")
                 
                 with col2:
-                    st.metric("Cost Savings", f"${rec['cost_savings']:,.2f}/month")
+                    st.metric("Cost Savings", f"${rec['annual_cost_savings']:,.0f}/year")
                 
                 with col3:
-                    st.metric("Payback Period", f"{rec['payback_period_months']:.1f} months")
+                    st.metric("Payback Period", format_months(rec['payback_period_months']))
                 
                 st.write(f"**Description:** {rec['description']}")
-                st.write(f"**Confidence:** {rec['confidence']*100:.0f}%")
+                st.write(f"**Confidence (heuristic):** {rec['confidence']*100:.0f}%")
                 
                 st.write("**Implementation Steps:**")
                 for i, step in enumerate(rec['implementation_steps'], 1):
@@ -400,8 +411,8 @@ if 'predictions_df' in st.session_state:
                 # Add top 3 recommendations
                 for i, rec in enumerate(st.session_state.optimization_report['recommendations'][:3], 1):
                     report_content += f"\n{i}. **{rec['title']}**\n"
-                    report_content += f"   - Savings: {rec['impact_kwh']:,.0f} kWh/year\n"
-                    report_content += f"   - ROI: {rec['payback_period_months']:.1f} months\n"
+                    report_content += f"   - Savings: {rec['impact_kwh']:,.0f} kWh over the analysed period\n"
+                    report_content += f"   - Payback: {format_months(rec['payback_period_months'])}\n"
                 
                 st.markdown(report_content)
                 
