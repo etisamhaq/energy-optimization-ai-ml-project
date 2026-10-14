@@ -1,5 +1,5 @@
 # Multi-stage build for Energy Optimization ML
-FROM python:3.9-slim as builder
+FROM python:3.9-slim AS builder
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
@@ -12,7 +12,7 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 # Copy requirements first for better caching
-COPY requirements-docker.txt requirements.txt ./
+COPY requirements-docker.txt ./
 
 # Install Python dependencies
 RUN pip install --no-cache-dir --user -r requirements-docker.txt
@@ -33,19 +33,17 @@ RUN useradd -m -u 1000 mluser
 WORKDIR /app
 
 # Copy installed packages from builder
-COPY --from=builder /root/.local /home/mluser/.local
+COPY --from=builder --chown=mluser:mluser /root/.local /home/mluser/.local
 
 # Copy application code
 COPY --chown=mluser:mluser . .
-
-# Make sure scripts are executable
-RUN chmod +x src/data/*.py src/models/*.py
 
 # Switch to non-root user
 USER mluser
 
 # Add local bin to PATH
-ENV PATH=/home/mluser/.local/bin:$PATH
+ENV PATH=/home/mluser/.local/bin:$PATH \
+    PYTHONUNBUFFERED=1
 
 # Expose ports
 EXPOSE 8000 8501

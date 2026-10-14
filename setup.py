@@ -7,8 +7,8 @@ from setuptools import setup, find_packages
 with open("README.md", "r", encoding="utf-8") as fh:
     long_description = fh.read()
 
-with open("requirements.txt", "r", encoding="utf-8") as fh:
-    requirements = [line.strip() for line in fh if line.strip() and not line.startswith("#")]
+with open("requirements-docker.txt", "r", encoding="utf-8") as fh:
+    requirements = [line.strip() for line in fh if line.strip() and not line.startswith(("#", "-r"))]
 
 setup(
     name="energy-optimization-ml",
@@ -18,21 +18,23 @@ setup(
     description="Advanced ML system for building energy optimization",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/yourusername/energy-optimization-ml",
-    packages=find_packages(where="src"),
-    package_dir={"": "src"},
+    url="https://github.com/etisamhaq/energy-optimization-ai-ml-project",
+    # Code imports itself as `src.<module>`, so `src` is the top-level package
+    packages=find_packages(include=["src", "src.*"]),
     classifiers=[
         "Development Status :: 4 - Beta",
         "Intended Audience :: Developers",
         "Topic :: Scientific/Engineering :: Artificial Intelligence",
         "License :: OSI Approved :: MIT License",
         "Programming Language :: Python :: 3",
-        "Programming Language :: Python :: 3.8",
         "Programming Language :: Python :: 3.9",
         "Programming Language :: Python :: 3.10",
     ],
-    python_requires=">=3.8",
+    python_requires=">=3.9",
     install_requires=requirements,
+    extras_require={
+        "dl": ["tensorflow==2.13.0", "torch==2.0.1", "pytorch-lightning==2.0.6"],
+    },
     entry_points={
         "console_scripts": [
             "energy-collect=src.data.collect_data:main",

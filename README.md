@@ -76,6 +76,15 @@ source venv/bin/activate  # On Windows: venv\Scripts\activate
 3. Install dependencies:
 ```bash
 pip install -r requirements.txt
+pip install -e .
+
+# Optional: TensorFlow/PyTorch for the LSTM model
+pip install -r requirements-dl.txt
+```
+
+4. Run the tests:
+```bash
+pytest
 ```
 
 ## Data Sources
@@ -118,18 +127,26 @@ python src/data/preprocess.py
 
 ### Training Models
 ```bash
-python src/models/train.py --model ensemble --epochs 100
+python src/models/train.py --model ensemble
 ```
 
 ### Making Predictions
 ```bash
-python src/models/predict.py --building_id B001 --date 2024-03-01
+python src/models/predict.py --building-id B001 --start-date 2024-03-01 --end-date 2024-03-07
 ```
+
+### Running the API
+```bash
+uvicorn src.api.main:app --host 0.0.0.0 --port 8000
+```
+Interactive docs are served at http://localhost:8000/docs. Set `CORS_ORIGINS` to a comma-separated list of allowed origins in production.
 
 ### Launching the Dashboard
 ```bash
 streamlit run src/visualization/dashboard.py
 ```
+
+> **Note:** The data pipeline currently generates synthetic energy, weather and building data (`src/data/data_loader.py`). Connect real data sources before using predictions for real decisions.
 
 ## Performance Metrics
 
@@ -154,11 +171,11 @@ streamlit run src/visualization/dashboard.py
 
 ## Contributing
 
-We welcome contributions! Please see our [Contributing Guidelines](CONTRIBUTING.md) for details.
+We welcome contributions! Please open an issue or pull request.
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License.
 
 ## Acknowledgments
 

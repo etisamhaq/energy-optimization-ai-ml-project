@@ -1,10 +1,11 @@
-.PHONY: help setup install clean test lint format run-api run-dashboard docker-build docker-up docker-down
+.PHONY: help setup install install-dl clean test test-file lint format collect-data preprocess train train-single predict run-api run-dashboard run-mlflow docker-build docker-up docker-down docker-logs pipeline dev deploy
 
 # Default target
 help:
 	@echo "Energy Optimization ML - Available commands:"
 	@echo "  make setup          - Set up development environment"
 	@echo "  make install        - Install dependencies"
+	@echo "  make install-dl     - Install optional deep-learning dependencies (LSTM)"
 	@echo "  make clean          - Clean generated files"
 	@echo "  make test           - Run tests"
 	@echo "  make lint           - Run linting"
@@ -20,7 +21,7 @@ help:
 
 # Setup development environment
 setup:
-	python -m venv venv
+	python3 -m venv venv
 	@echo "Virtual environment created. Activate with:"
 	@echo "  source venv/bin/activate  # On Linux/Mac"
 	@echo "  venv\\Scripts\\activate     # On Windows"
@@ -31,10 +32,13 @@ install:
 	pip install -r requirements.txt
 	pip install -e .
 
+install-dl:
+	pip install -r requirements-dl.txt
+
 # Clean generated files
 clean:
 	find . -type f -name "*.pyc" -delete
-	find . -type d -name "__pycache__" -delete
+	find . -type d -name "__pycache__" -prune -exec rm -rf {} +
 	find . -type d -name "*.egg-info" -exec rm -rf {} +
 	rm -rf build dist
 	rm -rf htmlcov .coverage
@@ -68,7 +72,7 @@ preprocess:
 
 # Model training
 train:
-	python src/models/train.py --model ensemble --optimize
+	python src/models/train.py --model ensemble
 
 train-single:
 	@read -p "Enter model name (xgboost/lightgbm/random_forest/prophet): " model; \

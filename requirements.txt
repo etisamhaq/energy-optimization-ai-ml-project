@@ -7,50 +7,27 @@ lightgbm==4.1.0
 prophet==1.1.4
 statsmodels==0.14.0
 
-# Deep Learning
-tensorflow==2.13.0
-torch==2.0.1
-pytorch-lightning==2.0.6
-
 # Data Visualization
-matplotlib
-seaborn
-plotly
+matplotlib==3.7.2
+seaborn==0.12.2
+plotly==5.17.0
 
 # API and Web Framework
-fastapi
-uvicorn
-streamlit
-pydantic
+fastapi==0.103.1
+uvicorn==0.23.2
+streamlit==1.27.2
+pydantic==2.4.2
 
 # ML Operations
-mlflow
-optuna
-shap
+mlflow==2.7.1
+optuna==3.3.0
+joblib==1.3.2
 
 # Utilities
-python-dotenv
-requests
-joblib
-tqdm
+requests==2.31.0
+pyyaml==6.0.1
 
 # Testing
-pytest
-pytest-cov
-
-# Time Series
-tslearn
-sktime
-
-# Data Quality
-great-expectations
-pandas-profiling
-
-# Database
-sqlalchemy
-psycopg2-binary
-
-# Additional dependencies
-pyyaml
-python-multipart
-httpx
+pytest==7.4.2
+pytest-cov==4.1.0
+httpx==0.25.0

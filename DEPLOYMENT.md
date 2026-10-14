@@ -19,8 +19,8 @@
 
 ### 1. Clone the Repository
 ```bash
-git clone https://github.com/yourusername/energy-optimization-ml.git
-cd energy-optimization-ml
+git clone https://github.com/etisamhaq/energy-optimization-ai-ml-project.git
+cd energy-optimization-ai-ml-project
 ```
 
 ### 2. Set Up Environment
@@ -107,8 +107,8 @@ sudo apt-get update
 sudo apt-get install docker.io docker-compose
 
 # Clone repository
-git clone https://github.com/yourusername/energy-optimization-ml.git
-cd energy-optimization-ml
+git clone https://github.com/etisamhaq/energy-optimization-ai-ml-project.git
+cd energy-optimization-ai-ml-project
 
 # Run Docker deployment
 docker-compose up -d
@@ -210,9 +210,6 @@ GRANT ALL PRIVILEGES ON DATABASE energy_optimization TO energy_user;
 ```bash
 # API health check
 curl http://localhost:8000/health
-
-# Custom health check script
-python scripts/health_check.py
 ```
 
 ### 2. Log Management
@@ -268,5 +265,5 @@ docker-compose restart api
    - Verify internet connectivity
 
 ### Support
-- GitHub Issues: https://github.com/yourusername/energy-optimization-ml/issues
+- GitHub Issues: https://github.com/etisamhaq/energy-optimization-ai-ml-project/issues
 - Email: energy-ml@example.com

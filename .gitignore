@@ -187,7 +187,4 @@ reports/*.html
 reports/*.pdf
 !reports/.gitkeep
 
-mlruns/
-mlflow-artifacts/
-
 *.csv

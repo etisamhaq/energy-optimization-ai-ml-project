@@ -4,12 +4,40 @@ Tests for FastAPI endpoints.
 
 import pytest
 from fastapi.testclient import TestClient
-from datetime import datetime, timedelta
-import json
 
-import sys
-sys.path.append('..')
+import src.api.main as api_main
 from src.api.main import app
+
+
+@pytest.fixture(scope="module")
+def trained_predictor(tmp_path_factory, monkeypatch_module):
+    """Run the real pipeline on a small synthetic dataset and serve its models."""
+    from src.data.collect_data import DataCollector
+    from src.data.preprocess import DataPreprocessor
+    from src.models.predict import EnergyPredictor
+    from src.models.train import ModelTrainer
+
+    root = tmp_path_factory.mktemp("pipeline")
+    data_dir, models_dir = root / "data", root / "models"
+    monkeypatch_module.setenv("MLFLOW_TRACKING_URI", (root / "mlruns").as_uri())
+
+    DataCollector(str(data_dir)).collect_all_data(n_buildings=3, n_days=30)
+    DataPreprocessor(str(data_dir)).run_preprocessing_pipeline()
+
+    trainer = ModelTrainer(str(data_dir), str(models_dir))
+    for model_name in ["xgboost", "lightgbm"]:
+        trainer.save_model(trainer.train_single_model(model_name))
+    trainer.save_model(trainer.train_ensemble())
+
+    predictor = EnergyPredictor(str(models_dir), str(data_dir))
+    monkeypatch_module.setattr(api_main, "predictor", predictor)
+    return predictor
+
+
+@pytest.fixture(scope="module")
+def monkeypatch_module():
+    with pytest.MonkeyPatch.context() as mp:
+        yield mp
 
 
 class TestAPI:
@@ -39,7 +67,7 @@ class TestAPI:
         assert data["status"] == "healthy"
         assert "timestamp" in data
     
-    def test_predict_endpoint_basic(self, client):
+    def test_predict_endpoint_basic(self, client, trained_predictor):
         """Test basic prediction endpoint."""
         request_data = {
             "building_id": "B001",
@@ -56,9 +84,9 @@ class TestAPI:
         assert data["building_id"] == "B001"
         assert "predictions" in data
         assert "summary" in data
-        assert len(data["predictions"]) == 24  # 24 hours for one day
+        assert len(data["predictions"]) == 48  # every hour of both days (end date is inclusive)
     
-    def test_predict_endpoint_with_optimization(self, client):
+    def test_predict_endpoint_with_optimization(self, client, trained_predictor):
         """Test prediction endpoint with optimization."""
         request_data = {
             "building_id": "B001",
@@ -88,7 +116,28 @@ class TestAPI:
         assert response.status_code == 400
         assert "End date must be after start date" in response.json()["detail"]
     
-    def test_batch_predict_endpoint(self, client):
+    def test_predict_endpoint_without_trained_model(self, client, monkeypatch, tmp_path):
+        """Missing models should be reported as service unavailable, not a server crash."""
+        from src.models.predict import EnergyPredictor
+        monkeypatch.setattr(api_main, "predictor", EnergyPredictor(str(tmp_path), str(tmp_path)))
+        
+        response = client.post("/predict", json={
+            "building_id": "B001",
+            "start_date": "2024-03-01",
+            "end_date": "2024-03-02"
+        })
+        assert response.status_code == 503
+    
+    def test_batch_predict_rejects_too_many_buildings(self, client):
+        """Batch requests are capped to protect the server."""
+        response = client.post("/predict/batch", json={
+            "building_ids": [f"B{i:03d}" for i in range(100)],
+            "start_date": "2024-03-01",
+            "end_date": "2024-03-02"
+        })
+        assert response.status_code == 422
+    
+    def test_batch_predict_endpoint(self, client, trained_predictor):
         """Test batch prediction endpoint."""
         request_data = {
             "building_ids": ["B001", "B002", "B003"],
@@ -105,7 +154,7 @@ class TestAPI:
         assert len(data["buildings"]) == 3
         assert all("total_predicted_kwh" in b for b in data["buildings"])
     
-    def test_compare_models_endpoint(self, client):
+    def test_compare_models_endpoint(self, client, trained_predictor):
         """Test model comparison endpoint."""
         request_data = {
             "building_id": "B001",
@@ -121,7 +170,7 @@ class TestAPI:
         assert "model_statistics" in data
         assert "ensemble_stats" in data
     
-    def test_optimize_endpoint(self, client):
+    def test_optimize_endpoint(self, client, trained_predictor):
         """Test optimization endpoint."""
         request_data = {
             "building_id": "B001",

@@ -1,0 +1,5 @@
+# Optional: only needed for the LSTM/GRU/Transformer models
+-r requirements.txt
+tensorflow==2.13.0
+torch==2.0.1
+pytorch-lightning==2.0.6
