@@ -18,10 +18,9 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from src.models import (
-    XGBoostModel, LightGBMModel, RandomForestModel,
-    ProphetModel, ARIMAModel, EnsembleModel, lstm_model
-)
+from src.models import XGBoostModel, LightGBMModel, RandomForestModel, EnsembleModel
+from src.models.base_model import regression_metrics
+from src.features.target_scaling import get_scale, scale_features
 
 logging.basicConfig(
     level=logging.INFO,
@@ -46,9 +45,6 @@ class ModelTrainer:
             'xgboost': XGBoostModel,
             'lightgbm': LightGBMModel,
             'random_forest': RandomForestModel,
-            'prophet': ProphetModel,
-            'arima': ARIMAModel,
-            'lstm': lstm_model,
             'ensemble': EnsembleModel
         }
     
@@ -89,6 +85,8 @@ class ModelTrainer:
         feature_cols = feature_info['all_features']
         target_col = feature_info['target']
         
+        target_scaling = feature_info.get('target_scaling')
+        
         for split in ['train', 'validation', 'test']:
             df = datasets[split]
             
@@ -96,10 +94,25 @@ class ModelTrainer:
             X = df[feature_cols]
             y = df[target_col]
             
+            # Models learn consumption relative to each building's recent level;
+            # the scale converts predictions back to kWh for evaluation
+            scale = get_scale(X) if target_scaling else np.ones(len(X))
+            if target_scaling:
+                X = scale_features(X, scale)
+                y = y / scale
+            
             prepared_data[f'X_{split}'] = X
             prepared_data[f'y_{split}'] = y
+            prepared_data[f'scale_{split}'] = scale
         
         return prepared_data
+    
+    @staticmethod
+    def evaluate_model(model, prepared_data: Dict, split: str) -> Dict[str, float]:
+        """Metrics in kWh, undoing the target scaling."""
+        scale = prepared_data[f'scale_{split}']
+        predictions = np.asarray(model.predict(prepared_data[f'X_{split}'])) * scale
+        return regression_metrics(prepared_data[f'y_{split}'] * scale, predictions)
     
     def train_single_model(self, model_name: str, model_params: Optional[Dict] = None,
                           prepared_data: Optional[Dict] = None) -> Dict:
@@ -118,7 +131,7 @@ class ModelTrainer:
         
         # Prepare validation data for models that support it
         validation_data = None
-        if model_name in ['xgboost', 'lightgbm', 'lstm']:
+        if model_name in ['xgboost', 'lightgbm', 'ensemble']:
             validation_data = (prepared_data['X_validation'], prepared_data['y_validation'])
         
         # Train model
@@ -136,13 +149,6 @@ class ModelTrainer:
                 prepared_data['y_train'],
                 eval_set=[validation_data]
             )
-        elif model_name == 'lstm':
-            # LSTM uses validation_data parameter
-            model.fit(
-                prepared_data['X_train'], 
-                prepared_data['y_train'],
-                validation_data=validation_data
-            )
         else:
             model.fit(prepared_data['X_train'], prepared_data['y_train'])
         
@@ -154,7 +160,7 @@ class ModelTrainer:
         }
         
         for split in ['train', 'validation', 'test']:
-            metrics = model.evaluate(prepared_data[f'X_{split}'], prepared_data[f'y_{split}'])
+            metrics = self.evaluate_model(model, prepared_data, split)
             results['metrics'][split] = metrics
             logger.info(f"{model_name} {split} metrics: {metrics}")
         
@@ -256,7 +262,7 @@ class ModelTrainer:
         }
         
         for split in ['train', 'validation', 'test']:
-            metrics = model.evaluate(prepared_data[f'X_{split}'], prepared_data[f'y_{split}'])
+            metrics = self.evaluate_model(model, prepared_data, split)
             results['metrics'][split] = metrics
             logger.info(f"ensemble {split} metrics: {metrics}")
         
@@ -313,8 +319,7 @@ def main():
     parser = argparse.ArgumentParser(description='Train Energy Optimization ML models')
     parser.add_argument(
         '--model',
-        choices=['xgboost', 'lightgbm', 'random_forest', 'prophet', 
-                'arima', 'lstm', 'ensemble', 'all'],
+        choices=['xgboost', 'lightgbm', 'random_forest', 'ensemble', 'all'],
         default='ensemble',
         help='Which model to train'
     )
@@ -357,7 +362,7 @@ def main():
     if args.model == 'all':
         # Train all models
         all_results = {}
-        for model_name in ['xgboost', 'lightgbm', 'random_forest', 'prophet']:
+        for model_name in ['xgboost', 'lightgbm', 'random_forest']:
             if args.optimize and model_name in ['xgboost', 'lightgbm', 'random_forest']:
                 results = trainer.optimize_hyperparameters(model_name, args.n_trials)
             else:

@@ -13,6 +13,26 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def regression_metrics(y_true, y_pred) -> Dict[str, float]:
+    """MAE, MSE, RMSE, R², MAPE and WAPE for consumption predictions."""
+    from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
+    
+    y_true = np.asarray(y_true, dtype=float)
+    y_pred = np.asarray(y_pred, dtype=float)
+    mse = mean_squared_error(y_true, y_pred)
+    # MAPE is undefined for zero consumption, so those hours are left out of it.
+    # WAPE (total error / total consumption) is robust to near-zero meters.
+    nonzero = y_true != 0
+    return {
+        'mae': mean_absolute_error(y_true, y_pred),
+        'mse': mse,
+        'rmse': float(np.sqrt(mse)),
+        'r2': r2_score(y_true, y_pred),
+        'mape': float(np.mean(np.abs((y_true[nonzero] - y_pred[nonzero]) / y_true[nonzero])) * 100),
+        'wape': float(np.abs(y_true - y_pred).sum() / np.abs(y_true).sum() * 100),
+    }
+
+
 class BaseEnergyModel(ABC):
     """Abstract base class for energy prediction models."""
     
@@ -36,24 +56,7 @@ class BaseEnergyModel(ABC):
     
     def evaluate(self, X: pd.DataFrame, y: pd.Series) -> Dict[str, float]:
         """Evaluate model performance."""
-        from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
-        
-        predictions = self.predict(X)
-        
-        # Calculate metrics
-        mae = mean_absolute_error(y, predictions)
-        mse = mean_squared_error(y, predictions)
-        rmse = np.sqrt(mse)
-        r2 = r2_score(y, predictions)
-        mape = np.mean(np.abs((y - predictions) / y)) * 100
-        
-        return {
-            'mae': mae,
-            'mse': mse,
-            'rmse': rmse,
-            'r2': r2,
-            'mape': mape
-        }
+        return regression_metrics(y, self.predict(X))
     
     def save_model(self, filepath: str):
         """Save the trained model."""

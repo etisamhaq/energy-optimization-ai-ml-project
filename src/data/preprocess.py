@@ -17,6 +17,7 @@ import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from src.features.feature_engineering import EnergyFeatureEngineer
+from src.features.target_scaling import SCALE_FEATURE
 
 logging.basicConfig(
     level=logging.INFO,
@@ -205,6 +206,10 @@ class DataPreprocessor:
                 feature_lists['categorical'].append(col)
             elif df[col].dtype in ['float64', 'int64']:
                 feature_lists['numerical'].append(col)
+        
+        # Models predict consumption relative to each building's previous-week mean
+        if SCALE_FEATURE in feature_lists['lag']:
+            feature_lists['target_scaling'] = SCALE_FEATURE
         
         # All features for modeling
         feature_lists['all_features'] = (
