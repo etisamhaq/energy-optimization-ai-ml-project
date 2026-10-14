@@ -5,7 +5,6 @@ Prediction script for Energy Optimization ML models.
 
 import argparse
 import logging
-import re
 from pathlib import Path
 import pandas as pd
 import numpy as np
@@ -16,10 +15,8 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-from src.models import (
-    XGBoostModel, LightGBMModel, RandomForestModel,
-    ProphetModel, ARIMAModel, EnsembleModel, lstm_model
-)
+from src.models import XGBoostModel, LightGBMModel, RandomForestModel, EnsembleModel
+from src.features.target_scaling import TARGET_HISTORY_FEATURE, SCALE_FEATURE, MIN_SCALE
 from src.features.feature_engineering import EnergyFeatureEngineer
 from src.data.data_loader import EnergyDataLoader, hourly_range
 
@@ -29,8 +26,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Model features computed from past consumption, e.g. energy_consumption_kwh_lag_24
-TARGET_HISTORY_FEATURE = re.compile(r'energy_consumption_kwh_(lag|rolling_mean|rolling_std)_(\d+)')
+# Forecasting recursively far beyond the last observation compounds errors, so the
+# requested window must start soon after the observed history ends
+MAX_FORECAST_GAP_DAYS = 14
+
 
 
 class EnergyPredictor:
@@ -51,9 +50,6 @@ class EnergyPredictor:
             'xgboost': XGBoostModel,
             'lightgbm': LightGBMModel,
             'random_forest': RandomForestModel,
-            'prophet': ProphetModel,
-            'arima': ARIMAModel,
-            'lstm': lstm_model,
             'ensemble': EnsembleModel
         }
     
@@ -122,8 +118,7 @@ class EnergyPredictor:
             logger.warning("No saved feature engineer found, creating new instance")
             return EnergyFeatureEngineer()
     
-    def prepare_prediction_data(self, building_id: str, start_date: str, 
-                              end_date: str, use_actual_weather: bool = False) -> pd.DataFrame:
+    def prepare_prediction_data(self, building_id: str, start_date: str, end_date: str) -> pd.DataFrame:
         """Prepare data for prediction."""
         logger.info(f"Preparing prediction data for building {building_id} from {start_date} to {end_date}")
         
@@ -139,12 +134,8 @@ class EnergyPredictor:
         # Get building metadata
         building_metadata = self.data_loader.load_building_metadata([building_id])
         
-        # Get weather data
-        if use_actual_weather:
-            weather_data = self.data_loader.load_weather_data(start_date, end_date, "New York")
-        else:
-            # Use synthetic weather for demonstration
-            weather_data = self.data_loader._generate_synthetic_weather_data(start_date, end_date)
+        # Weather from the same source as the training data (real Open-Meteo or synthetic)
+        weather_data = self.data_loader.load_weather_data(start_date, end_date)
         
         # Merge data
         prediction_df = pd.merge(prediction_df, weather_data, on='timestamp', how='left')
@@ -195,67 +186,79 @@ class EnergyPredictor:
         return features
 
     def predict_range(self, building_id: str, start_date: str, end_date: str,
-                     model_name: str = 'ensemble', use_actual_weather: bool = False) -> pd.DataFrame:
+                     model_name: str = 'ensemble') -> pd.DataFrame:
         """
         Predict hourly energy consumption for every hour from start_date through end_date.
-
-        Feature-based models forecast recursively: lag and rolling features come from
-        observed consumption before start_date, then from the model's own predictions.
+        
+        Forecasts are recursive: lag and rolling features come from observed consumption
+        before start_date, then from the model's own predictions.
         """
         # Load model if not already loaded
         if model_name not in self.loaded_models:
             self.load_latest_model(model_name)
-
+        
         model = self.loaded_models[model_name]
-
+        
         feature_info = self.load_feature_info()
         feature_cols = feature_info['all_features']
+        target_scaling = feature_info.get('target_scaling')
         start = pd.to_datetime(start_date).normalize()
-
-        if model_name in ['prophet', 'arima']:
-            # Pure time-series models forecast from timestamps alone
-            prediction_df = self.prepare_prediction_data(building_id, start_date, end_date, use_actual_weather)
-            predictions = np.asarray(model.predict(prediction_df[['timestamp']]))
-        else:
-            history = self.load_consumption_history(building_id)
-            history = history[history.index < start]
-            max_lookback = max(
-                [int(TARGET_HISTORY_FEATURE.fullmatch(c).group(2)) for c in feature_cols
-                 if TARGET_HISTORY_FEATURE.fullmatch(c)],
-                default=1
+        
+        full_history = self.load_consumption_history(building_id)
+        if full_history.empty:
+            raise ValueError(f"No consumption history for building {building_id}")
+        
+        # Regular hourly grid with short meter gaps interpolated, so lag N is N hours back
+        history = full_history[full_history.index < start]
+        history = history[~history.index.duplicated()]
+        if not history.empty:
+            history = history.asfreq('H').interpolate(limit_direction='both')
+        
+        max_lookback = max(
+            [int(TARGET_HISTORY_FEATURE.fullmatch(c).group(2)) for c in feature_cols
+             if TARGET_HISTORY_FEATURE.fullmatch(c)],
+            default=1
+        )
+        if len(history) < max_lookback:
+            raise ValueError(
+                f"Building {building_id} needs at least {max_lookback} hours of consumption "
+                f"history before {start.date()}, found {len(history)}. History covers "
+                f"{full_history.index.min().date()} to {full_history.index.max().date()}"
             )
-            if len(history) < max_lookback:
-                raise ValueError(
-                    f"Building {building_id} needs at least {max_lookback} hours of consumption "
-                    f"history before {start.date()}, found {len(history)}"
-                )
-
-            # Forecast from the end of observed history, so any gap up to start_date is bridged
-            forecast_start = history.index.max() + pd.Timedelta(hours=1)
-            base_df = self.prepare_prediction_data(
-                building_id, forecast_start.strftime('%Y-%m-%d'), end_date, use_actual_weather
+        gap_days = (start - history.index.max()).total_seconds() / 86400
+        if gap_days > MAX_FORECAST_GAP_DAYS:
+            raise ValueError(
+                f"Consumption history for building {building_id} ends {history.index.max().date()}; "
+                f"forecasts must start within {MAX_FORECAST_GAP_DAYS} days of it"
             )
-            base_df = base_df[base_df['timestamp'] >= forecast_start].reset_index(drop=True)
-
-            # Non-target features (time, weather, building) are known in advance
-            featured = self.feature_engineer.create_all_features(base_df).reset_index(drop=True)
-            # Fill gaps (e.g. the first hour's weather change) the same way preprocessing does
-            X = featured.reindex(columns=feature_cols).ffill().bfill()
-
-            values = history.iloc[-max_lookback:].tolist()
-            predictions = []
-            for i in range(len(X)):
-                row = X.iloc[[i]].copy()
-                for col, value in self._target_history_features(values, feature_cols).items():
-                    row[col] = value
-                prediction = max(float(np.asarray(model.predict(row))[0]), 0.0)
-                predictions.append(prediction)
-                values.append(prediction)
-
-            prediction_df = featured.assign(predicted=predictions)
-            prediction_df = prediction_df[prediction_df['timestamp'] >= start]
-            predictions = prediction_df['predicted'].to_numpy()
-
+        
+        # Forecast from the end of observed history, so any gap up to start_date is bridged
+        forecast_start = history.index.max() + pd.Timedelta(hours=1)
+        base_df = self.prepare_prediction_data(building_id, forecast_start.strftime('%Y-%m-%d'), end_date)
+        base_df = base_df[base_df['timestamp'] >= forecast_start].reset_index(drop=True)
+        
+        # Non-target features (time, weather, building) are known in advance.
+        # Fill gaps (e.g. the first hour's weather change) the same way preprocessing does
+        featured = self.feature_engineer.create_all_features(base_df).reset_index(drop=True)
+        X = featured.reindex(columns=feature_cols).ffill().bfill()
+        
+        values = history.iloc[-max_lookback:].tolist()
+        predictions = []
+        for i in range(len(X)):
+            row = X.iloc[[i]].copy()
+            history_features = self._target_history_features(values, feature_cols)
+            # Models trained with target scaling predict relative to the previous-week mean
+            scale = max(history_features[SCALE_FEATURE], MIN_SCALE) if target_scaling else 1.0
+            for col, value in history_features.items():
+                row[col] = value / scale
+            prediction = max(float(np.asarray(model.predict(row))[0]) * scale, 0.0)
+            predictions.append(prediction)
+            values.append(prediction)
+        
+        prediction_df = featured.assign(predicted=predictions)
+        prediction_df = prediction_df[prediction_df['timestamp'] >= start]
+        predictions = prediction_df['predicted'].to_numpy()
+        
         # Create results dataframe
         results_df = pd.DataFrame({
             'timestamp': prediction_df['timestamp'].to_numpy(),
@@ -359,8 +362,7 @@ def main():
     )
     parser.add_argument(
         '--model',
-        choices=['xgboost', 'lightgbm', 'random_forest', 'prophet', 
-                'arima', 'lstm', 'ensemble'],
+        choices=['xgboost', 'lightgbm', 'random_forest', 'ensemble'],
         default='ensemble',
         help='Model to use for predictions'
     )
