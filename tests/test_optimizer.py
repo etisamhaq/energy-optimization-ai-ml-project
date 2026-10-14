@@ -91,16 +91,73 @@ class TestEnergyOptimizer:
             impact_kwh=1000,
             cost_savings=120,
             implementation_cost=1000,
-            payback_period_months=8.33,
             priority=1,
             confidence=0.9,
             implementation_steps=["Step 1", "Step 2"],
-            prerequisites=["Prereq 1"]
+            prerequisites=["Prereq 1"],
+            annual_cost_savings=1440
         )
         
-        # Test ROI calculation
-        expected_roi = (120 * 12 / 1000) * 100
-        assert rec.roi == expected_roi
+        # Test ROI calculation (annual savings over implementation cost)
+        assert rec.roi == pytest.approx(144.0)
+        assert rec.to_dict()['type'] == OptimizationType.PEAK_LOAD_SHIFTING.value
+    
+    def test_payback_is_calculated_from_annual_savings(self, optimizer, consumption_data, building_metadata):
+        """Payback and ROI must follow from cost and savings, scaled from the analysed week to a year."""
+        report = optimizer.generate_optimization_report(consumption_data, building_metadata)
+        period_days = report['analysis']['period_days']
+        
+        for rec in report['recommendations']:
+            assert rec['annual_cost_savings'] == pytest.approx(rec['cost_savings'] * 365 / period_days)
+            assert rec['payback_period_months'] == pytest.approx(
+                rec['implementation_cost'] / rec['annual_cost_savings'] * 12
+            )
+            assert rec['roi'] == pytest.approx(rec['annual_cost_savings'] / rec['implementation_cost'] * 100)
+    
+    def test_report_is_json_safe_without_weekend(self, optimizer, building_metadata):
+        """A window with no weekend days must not produce NaN/inf (invalid JSON)."""
+        import json
+        thursday = pd.Timestamp('2024-01-04')
+        data = pd.DataFrame({
+            'timestamp': pd.date_range(thursday, periods=48, freq='H'),
+            'predicted_consumption_kwh': np.random.uniform(50, 150, 48)
+        })
+        report = optimizer.generate_optimization_report(data, building_metadata)
+        
+        assert report['analysis']['weekly_patterns']['weekend_vs_weekday_ratio'] is None
+        json.dumps(report, default=str, allow_nan=False)
+    
+    def test_weekend_ratio_uses_day_of_week(self, optimizer):
+        """Weekend days at half the weekday load give a ratio of 0.5, whichever days are present."""
+        hours = pd.date_range('2024-01-05', periods=24 * 3, freq='H')  # Fri, Sat, Sun
+        data = pd.DataFrame({
+            'timestamp': hours,
+            'predicted_consumption_kwh': [50.0 if t.dayofweek >= 5 else 100.0 for t in hours]
+        })
+        assert optimizer._weekend_vs_weekday_ratio(data) == pytest.approx(0.5)
+    
+    def test_total_savings_account_for_overlap(self, optimizer, consumption_data, building_metadata):
+        """Overlapping measures combine to less than the sum of their standalone savings."""
+        report = optimizer.generate_optimization_report(consumption_data, building_metadata)
+        summary = report['summary']
+        standalone = sum(r['impact_kwh'] for r in report['recommendations'])
+        
+        assert summary['standalone_kwh_savings_sum'] == pytest.approx(standalone)
+        assert 0 < summary['total_kwh_savings_potential'] < standalone
+        total = consumption_data['predicted_consumption_kwh'].sum()
+        expected_remaining = np.prod([1 - r['impact_kwh'] / total for r in report['recommendations']])
+        assert summary['savings_percentage'] == pytest.approx((1 - expected_remaining) * 100)
+    
+    def test_assumptions_can_be_overridden(self, consumption_data, building_metadata):
+        """Cheaper smart controls should shorten the load-shifting payback."""
+        default = EnergyOptimizer(electricity_rate=0.15)
+        cheaper = EnergyOptimizer(electricity_rate=0.15, assumptions={'smart_controls_cost': 1000.0})
+        
+        def payback(opt):
+            report = opt.generate_optimization_report(consumption_data, building_metadata)
+            return next(r for r in report['recommendations'] if r['recommendation_id'] == 'PLS001')['payback_period_months']
+        
+        assert payback(cheaper) == pytest.approx(payback(default) / 5)
     
     def test_generate_peak_load_shifting_recommendations(self, optimizer, consumption_data, building_metadata):
         """Test peak load shifting recommendations."""
@@ -184,12 +241,8 @@ class TestEnergyOptimizer:
                 # If same priority, ROI should be descending
                 if rec1['priority'] == rec2['priority']:
                     # Calculate ROI from the recommendation data
-                    roi1 = (rec1['cost_savings'] * 12 / rec1['implementation_cost']) * 100 if rec1['implementation_cost'] > 0 else float('inf')
-                    roi2 = (rec2['cost_savings'] * 12 / rec2['implementation_cost']) * 100 if rec2['implementation_cost'] > 0 else float('inf')
-                    
-                    # Handle infinity case
-                    if roi1 != float('inf') and roi2 != float('inf'):
-                        assert roi1 >= roi2
+                    if rec1['roi'] is not None and rec2['roi'] is not None:
+                        assert rec1['roi'] >= rec2['roi']
     
     def test_electricity_rate_impact(self, consumption_data, building_metadata):
         """Test that electricity rate affects recommendations."""
