@@ -1,15 +1,17 @@
 import pandas as pd
 import numpy as np
 from pathlib import Path
-from typing import Dict, List, Optional, Union
-import requests
+from typing import Dict, List, Optional
 import json
 import zlib
 from datetime import datetime, timedelta
 import logging
 
-logging.basicConfig(level=logging.INFO)
+from src.data.open_meteo import fetch_weather
+
 logger = logging.getLogger(__name__)
+
+ENERGY_COLUMNS = ['building_id', 'timestamp', 'energy_consumption_kwh']
 
 
 def hourly_range(start_date: str, end_date: str) -> pd.DatetimeIndex:
@@ -17,6 +19,23 @@ def hourly_range(start_date: str, end_date: str) -> pd.DatetimeIndex:
     start = pd.to_datetime(start_date).normalize()
     end = pd.to_datetime(end_date).normalize() + pd.Timedelta(hours=23)
     return pd.date_range(start=start, end=end, freq='H')
+
+
+def validate_energy_data(df: pd.DataFrame) -> pd.DataFrame:
+    """Check that energy data has the expected columns and plausible values."""
+    missing = set(ENERGY_COLUMNS) - set(df.columns)
+    if missing:
+        raise ValueError(f"Energy data is missing required columns: {sorted(missing)}")
+    
+    df = df.copy()
+    df['building_id'] = df['building_id'].astype(str)
+    df['timestamp'] = pd.to_datetime(df['timestamp'])
+    df['energy_consumption_kwh'] = pd.to_numeric(df['energy_consumption_kwh'], errors='coerce')
+    if (df['energy_consumption_kwh'] < 0).any():
+        raise ValueError("Energy data contains negative consumption values")
+    if df.duplicated(['building_id', 'timestamp']).any():
+        raise ValueError("Energy data contains duplicate building_id/timestamp rows")
+    return df
 
 
 class EnergyDataLoader:
@@ -32,10 +51,23 @@ class EnergyDataLoader:
         for dir_path in [self.raw_dir, self.processed_dir, self.external_dir]:
             dir_path.mkdir(parents=True, exist_ok=True)
     
+    @property
+    def site_file(self) -> Path:
+        return self.external_dir / "site.json"
+    
+    @property
+    def metadata_file(self) -> Path:
+        return self.external_dir / "building_metadata.csv"
+    
     def load_energy_consumption_data(self, file_path: Optional[str] = None) -> pd.DataFrame:
-        """Load building energy consumption data."""
+        """
+        Load building energy consumption data.
+        
+        file_path: CSV with building_id, timestamp and energy_consumption_kwh columns
+        (hourly, local time). Without a file, synthetic demo data is generated.
+        """
         if file_path:
-            df = pd.read_csv(file_path)
+            df = validate_energy_data(pd.read_csv(file_path))
         else:
             # Generate synthetic data for demonstration
             df = self._generate_synthetic_energy_data()
@@ -43,16 +75,57 @@ class EnergyDataLoader:
         logger.info(f"Loaded energy data with shape: {df.shape}")
         return df
     
-    def load_weather_data(self, start_date: str, end_date: str, location: str) -> pd.DataFrame:
-        """Load weather data for the specified location and time period."""
-        # In a real implementation, this would fetch from NOAA or similar API
-        # For now, generate synthetic weather data
-        df = self._generate_synthetic_weather_data(start_date, end_date)
-        logger.info(f"Loaded weather data for {location} from {start_date} to {end_date}")
+    def save_site(self, site: Dict):
+        """Record where the data comes from, so predictions use matching weather."""
+        with open(self.site_file, 'w') as f:
+            json.dump(site, f, indent=2)
+    
+    def load_site(self) -> Dict:
+        """Location and weather source of the collected data (synthetic if none was saved)."""
+        if self.site_file.exists():
+            with open(self.site_file) as f:
+                return json.load(f)
+        return {'name': 'synthetic', 'weather_source': 'synthetic'}
+    
+    def load_weather_data(self, start_date: str, end_date: str, location: Optional[str] = None) -> pd.DataFrame:
+        """Hourly weather for every hour of the date range at the data's site."""
+        site = self.load_site()
+        if site.get('weather_source') == 'open-meteo':
+            df = fetch_weather(
+                site['latitude'], site['longitude'], site['timezone'],
+                start_date, end_date, cache_dir=self.external_dir / "weather_cache"
+            )
+        else:
+            df = self._generate_synthetic_weather_data(start_date, end_date)
+        logger.info(f"Loaded {site.get('weather_source')} weather for {site.get('name')} "
+                    f"from {start_date} to {end_date}")
         return df
     
+    def save_building_metadata(self, metadata: pd.DataFrame):
+        """Store building metadata so predictions use the same characteristics as training."""
+        metadata.to_csv(self.metadata_file, index=False)
+    
+    def list_buildings(self) -> List[str]:
+        """IDs of the buildings with stored metadata."""
+        if not self.metadata_file.exists():
+            return []
+        return pd.read_csv(self.metadata_file)['building_id'].astype(str).tolist()
+    
     def load_building_metadata(self, building_ids: List[str]) -> pd.DataFrame:
-        """Load building characteristics and metadata."""
+        """
+        Load building characteristics and metadata.
+        
+        Uses the metadata saved at collection time when present (raising ValueError for
+        unknown buildings); otherwise generates synthetic demo metadata.
+        """
+        if self.metadata_file.exists():
+            stored = pd.read_csv(self.metadata_file)
+            stored['building_id'] = stored['building_id'].astype(str)
+            unknown = set(map(str, building_ids)) - set(stored['building_id'])
+            if unknown:
+                raise ValueError(f"Unknown building(s): {sorted(unknown)}")
+            return stored.set_index('building_id').loc[list(map(str, building_ids))].reset_index()
+        
         # Generate synthetic building metadata, seeded by building ID so the same
         # building always gets the same characteristics across calls and processes
         metadata = []
@@ -171,9 +244,9 @@ if __name__ == "__main__":
     # Example usage
     loader = EnergyDataLoader()
     
-    # Load synthetic data
+    # Load synthetic data (weather follows the saved site, synthetic by default)
     energy_data = loader.load_energy_consumption_data()
-    weather_data = loader.load_weather_data("2023-01-01", "2023-12-31", "New York")
+    weather_data = loader.load_weather_data("2023-01-01", "2023-12-31")
     building_metadata = loader.load_building_metadata(energy_data['building_id'].unique())
     
     # Integrate datasets
