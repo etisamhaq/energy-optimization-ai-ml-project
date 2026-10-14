@@ -3,19 +3,23 @@ FastAPI application for Energy Optimization ML API.
 """
 
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
+from fastapi.responses import JSONResponse, Response
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, ConfigDict, Field
 from typing import List, Optional, Dict
 from datetime import datetime, timedelta
 import logging
 import sys
+
+import pandas as pd
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from src.models.predict import EnergyPredictor
 from src.optimization.optimizer import EnergyOptimizer
-from src.data.data_loader import EnergyDataLoader
+from src.api.security import ObservabilityMiddleware, PREDICTIONS, configured_api_keys, require_api_key
 from src.utils.helpers import validate_date_range
 
 # Configure logging
@@ -25,10 +29,12 @@ logger = logging.getLogger(__name__)
 MAX_PREDICTION_DAYS = 365
 MAX_BUILDINGS_PER_REQUEST = 50
 
-# Initialize components
-predictor = EnergyPredictor()
+# Initialize components. DATA_DIR and MODELS_DIR point at the pipeline's outputs.
+predictor = EnergyPredictor(
+    models_dir=os.environ.get("MODELS_DIR", "models"),
+    data_dir=os.environ.get("DATA_DIR", "data")
+)
 optimizer = EnergyOptimizer()
-data_loader = EnergyDataLoader()
 
 
 @asynccontextmanager
@@ -40,6 +46,8 @@ async def lifespan(app: FastAPI):
         logger.info("Models preloaded successfully")
     except Exception as e:
         logger.warning(f"Could not preload ensemble model: {e}")
+    if not configured_api_keys():
+        logger.warning("API_KEYS is not set: authentication is DISABLED. Set it in production.")
     logger.info("Energy Optimization ML API started")
     yield
 
@@ -49,7 +57,14 @@ app = FastAPI(
     title="Energy Optimization ML API",
     description="API for predicting building energy consumption and providing optimization recommendations",
     version="1.0.0",
-    lifespan=lifespan
+    lifespan=lifespan,
+    # Every endpoint except the public ones (PUBLIC_PATHS) requires an API key when API_KEYS is set
+    dependencies=[Depends(require_api_key)]
+)
+
+app.add_middleware(
+    ObservabilityMiddleware,
+    limit_per_minute=int(os.environ.get("RATE_LIMIT_PER_MINUTE", "60"))
 )
 
 # Add CORS middleware. Set CORS_ORIGINS to a comma-separated list of allowed origins in production.
@@ -160,19 +175,39 @@ async def root():
             "batch_predictions": "/predict/batch",
             "model_comparison": "/compare",
             "optimization": "/optimize",
-            "health": "/health"
+            "health": "/health",
+            "readiness": "/ready",
+            "metrics": "/metrics"
         }
     }
 
 
 @app.get("/health")
 async def health_check():
-    """Health check endpoint."""
+    """Liveness: the process is up."""
     return {
         "status": "healthy",
         "timestamp": datetime.now().isoformat(),
         "models_loaded": list(predictor.loaded_models.keys())
     }
+
+
+@app.get("/ready")
+def readiness_check():
+    """Readiness: a trained model and its feature definitions can be loaded."""
+    try:
+        if "ensemble" not in predictor.loaded_models:
+            predictor.load_latest_model("ensemble")
+        predictor.load_feature_info()
+    except Exception as e:
+        return JSONResponse(status_code=503, content={"status": "not ready", "detail": str(e)})
+    return {"status": "ready", "models_loaded": list(predictor.loaded_models.keys())}
+
+
+@app.get("/metrics")
+def metrics():
+    """Prometheus metrics."""
+    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 
 @app.post("/predict", response_model=PredictionResponse)
@@ -190,6 +225,7 @@ def predict_energy(request: PredictionRequest):
         )
         
         # Convert to dict for response
+        PREDICTIONS.labels(request.model_name).inc(len(predictions_df))
         predictions = predictions_df.to_dict('records')
         
         # Calculate summary statistics
@@ -205,7 +241,7 @@ def predict_energy(request: PredictionRequest):
         optimization_report = None
         if request.include_optimization:
             # Get building metadata
-            building_metadata = data_loader.load_building_metadata([request.building_id])
+            building_metadata = predictor.data_loader.load_building_metadata([request.building_id])
             metadata_dict = building_metadata.iloc[0].to_dict()
             
             # Generate optimization report
@@ -241,6 +277,7 @@ def batch_predict(request: BatchPredictionRequest):
                 request.model_name
             )
             
+            PREDICTIONS.labels(request.model_name).inc(len(predictions_df))
             results.append({
                 "building_id": building_id,
                 "total_predicted_kwh": float(predictions_df['predicted_consumption_kwh'].sum()),
@@ -304,35 +341,31 @@ def compare_models(request: ModelComparisonRequest):
 def optimize_energy(request: OptimizationRequest):
     """Generate optimization recommendations for a building."""
     try:
-        # Get recent predictions for analysis
-        end_date = datetime.now()
-        start_date = end_date - timedelta(days=request.analysis_period_days)
+        # Analyse the most recent measured consumption: recommendations should be
+        # based on what the building actually used, not on a forecast
+        history = predictor.load_consumption_history(request.building_id).dropna()
+        if history.empty:
+            raise ValueError(f"No consumption history for building {request.building_id}")
+        end = history.index.max()
+        recent = history[history.index > end - timedelta(days=request.analysis_period_days)]
+        consumption_df = pd.DataFrame({
+            'timestamp': recent.index,
+            # The optimizer reads this column for both forecast and measured consumption
+            'predicted_consumption_kwh': recent.to_numpy()
+        })
         
-        predictions_df, _ = predictor.predict_range(
-            request.building_id,
-            start_date.strftime("%Y-%m-%d"),
-            end_date.strftime("%Y-%m-%d"),
-            "ensemble"
-        )
-        
-        # Get building metadata
-        building_metadata = data_loader.load_building_metadata([request.building_id])
+        building_metadata = predictor.data_loader.load_building_metadata([request.building_id])
         metadata_dict = building_metadata.iloc[0].to_dict()
         
         # Create optimizer with custom rate
         custom_optimizer = EnergyOptimizer(electricity_rate=request.electricity_rate)
-        
-        # Generate optimization report
-        report = custom_optimizer.generate_optimization_report(
-            predictions_df,
-            metadata_dict
-        )
+        report = custom_optimizer.generate_optimization_report(consumption_df, metadata_dict)
         
         return {
             "building_id": request.building_id,
             "analysis_period": {
-                "start_date": start_date.strftime("%Y-%m-%d"),
-                "end_date": end_date.strftime("%Y-%m-%d")
+                "start_date": recent.index.min().strftime("%Y-%m-%d"),
+                "end_date": end.strftime("%Y-%m-%d")
             },
             "optimization_report": report
         }
@@ -345,16 +378,11 @@ def optimize_energy(request: OptimizationRequest):
 def list_buildings():
     """List available buildings."""
     try:
-        # Get sample building IDs
-        building_ids = [f"B{str(i).zfill(3)}" for i in range(1, 11)]
-        buildings = []
-        
-        for building_id in building_ids:
-            metadata = data_loader.load_building_metadata([building_id])
-            if not metadata.empty:
-                buildings.append(metadata.iloc[0].to_dict())
-        
-        return {"buildings": buildings}
+        building_ids = predictor.data_loader.list_buildings()
+        if not building_ids:
+            return {"buildings": []}
+        metadata = predictor.data_loader.load_building_metadata(building_ids)
+        return {"buildings": metadata.to_dict('records')}
         
     except Exception as e:
         raise _error_response(e, "Error listing buildings")
@@ -384,21 +412,6 @@ async def list_models():
                 "name": "random_forest",
                 "description": "Random Forest model",
                 "type": "ml"
-            },
-            {
-                "name": "prophet",
-                "description": "Facebook Prophet time series model",
-                "type": "time_series"
-            },
-            {
-                "name": "arima",
-                "description": "ARIMA time series model",
-                "type": "time_series"
-            },
-            {
-                "name": "lstm",
-                "description": "LSTM deep learning model",
-                "type": "deep_learning"
             }
         ]
     }
