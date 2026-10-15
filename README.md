@@ -1,42 +1,53 @@
-# Energy Optimization ML: Intelligent Building Energy Prediction & Optimization
+# Energy Optimization ML: Building Energy Forecasting & Savings Recommendations
 
-## Overview
+Forecasts each building's hourly electricity use from real meter and weather data, then recommends measures to cut energy use, cost and CO₂, with every savings estimate traceable to its assumptions.
 
-This project implements an advanced machine learning system for predicting and optimizing energy consumption in buildings. It trains on real hourly meter data (or your own) with real weather, forecasts each building's consumption, and recommends measures to cut energy use, costs and carbon emissions.
+![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)
+![XGBoost](https://img.shields.io/badge/XGBoost%20%7C%20LightGBM%20%7C%20RF-ensemble-orange.svg)
+![FastAPI](https://img.shields.io/badge/API-FastAPI-009688.svg)
+![License](https://img.shields.io/badge/License-MIT-lightgrey.svg)
+
+## At a Glance
+
+**Tested on real data:** 10 buildings in Washington, DC from the [Building Data Genome Project 2](https://github.com/buds-lab/building-data-genome-project-2), with real hourly weather. The models were trained on 2016 to mid-2017, then made 40 recursive 48-hour forecasts on held-out autumn 2017 data.
+
+| Model | Forecast error (WAPE) |
+|---|---|
+| **Ensemble** (XGBoost + LightGBM + Random Forest) | **17.4%** |
+| Naive baseline (same hour last week) | 21.7% |
+
+- The ensemble beats the baseline on **all 10 buildings** (per-building error 5.5%–21.4%).
+- One model serves buildings of very different sizes, because it predicts consumption relative to each building's own previous week.
+- **Savings recommendations** cover peak-load shifting, HVAC setpoints, start-up scheduling, LED and HVAC upgrades, and solar. Each report shows its payback, ROI and the rule-of-thumb assumptions behind it. These are **planning estimates, not measured savings**.
+- **Production-ready serving:** FastAPI with API-key auth, rate limiting, readiness checks and Prometheus metrics; a Streamlit dashboard; Docker Compose; and a test suite.
+
+**Run it on real data:**
+
+```bash
+pip install -r requirements.txt -c constraints.txt && pip install -e .
+make collect-real   # downloads BDG2 meters for 10 DC buildings (~175 MB, once) + Open-Meteo weather
+make preprocess && make train
+streamlit run src/visualization/dashboard.py
+```
+
+## Dashboard
+
+*Screenshots show the synthetic demo dataset (`make collect-data`); real-data runs list BDG2 building IDs instead.*
+
+| Overview | Forecasts |
+|---|---|
+| ![Dashboard overview](images/overview.png) | ![Hourly consumption forecast and heatmap](images/predictions.png) |
+| **Optimization** | **Report** |
+| ![Savings recommendations with payback](images/optimization.png) | ![Generated energy report](images/report.png) |
 
 ## Problem Statement
 
-Buildings account for approximately 40% of global energy consumption and 36% of CO2 emissions. This project addresses the critical need for intelligent energy management systems that can:
+Buildings account for roughly 30% of global final energy use and about a quarter of energy-related CO₂ emissions (IEA). This project addresses the need for energy management that can:
 
 - Accurately predict energy consumption patterns
 - Identify optimization opportunities
 - Provide actionable recommendations for energy savings
-- Scale from individual buildings to city-wide implementations
-
-## Features
-
-- **Multi-source Data Integration**: Combines energy consumption data, weather patterns, and building characteristics
-- **ML Models**: Ensemble of XGBoost, LightGBM and Random Forest, forecasting each building relative to its own recent consumption
-- **Real-time Predictions**: API-based system for continuous energy monitoring
-- **Optimization Engine**: Provides specific recommendations for reducing energy consumption
-- **Interactive Dashboard**: Visualizes predictions and optimization opportunities
-
-![Alt Text](images/overview.png)
-
-
-![Alt Text](images/overview1.png)
-
-
-![Alt Text](images/predictions.png)
-
-
-![Alt Text](images/optimization.png)
-
-
-![Alt Text](images/building_information.png)
-
-
-![Alt Text](images/report.png)
+- Scale from individual buildings to portfolios
 
 ## Project Structure
 
@@ -53,8 +64,7 @@ energy-optimization-ml/
 │   ├── models/        # ML model implementations
 │   ├── visualization/ # Plotting and dashboard code
 │   └── utils/         # Helper functions
-├── models/            # Saved model artifacts
-├── reports/           # Generated analysis reports
+├── models/            # Saved model artifacts (created by training)
 ├── tests/             # Unit and integration tests
 └── requirements.txt   # Project dependencies
 ```
