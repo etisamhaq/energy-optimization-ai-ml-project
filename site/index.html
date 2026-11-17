@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LoadLens: Building Energy Forecasting</title>
+<meta name="description" content="Hourly electricity forecasting for 10 real buildings: a rolling-origin backtest, a meter-outage fix, error analysis, peak accuracy and SHAP drivers.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+:root {
+  color-scheme: light;
+  --bg: #f7f7f5; --surface: #fcfcfb; --border: #e4e3df;
+  --ink: #0b0b0b; --ink-2: #52514e; --ink-3: #7a7974;
+  --model: #2a78d6; --naive: #eb6834; --actual: #0b0b0b; --grid: #ecebe7;
+  --accent-soft: #e8f1fc;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #121211; --surface: #1a1a19; --border: #2e2e2c;
+    --ink: #f0efec; --ink-2: #c3c2b7; --ink-3: #8f8e86;
+    --model: #3987e5; --naive: #d95926; --actual: #f0efec; --grid: #2a2a28;
+    --accent-soft: #1b2a3d;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #121211; --surface: #1a1a19; --border: #2e2e2c;
+  --ink: #f0efec; --ink-2: #c3c2b7; --ink-3: #8f8e86;
+  --model: #3987e5; --naive: #d95926; --actual: #f0efec; --grid: #2a2a28;
+  --accent-soft: #1b2a3d;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.6 Inter, system-ui, sans-serif; }
+.wrap { max-width: 1040px; margin: 0 auto; padding: 0 16px; }
+header { padding: 56px 0 24px; }
+.eyebrow { font: 500 13px/1 'JetBrains Mono', monospace; color: var(--ink-3); letter-spacing: .04em; text-transform: uppercase; }
+h1 { font-size: clamp(34px, 6vw, 52px); line-height: 1.05; margin: 14px 0 12px; letter-spacing: -.02em; }
+h1 span { color: var(--model); }
+.lede { font-size: 19px; color: var(--ink-2); max-width: 720px; margin: 0; }
+.links { margin-top: 20px; display: flex; gap: 12px; flex-wrap: wrap; }
+.btn { display: inline-flex; align-items: center; gap: 8px; padding: 9px 16px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); color: var(--ink); text-decoration: none; font-weight: 500; font-size: 15px; }
+.btn:hover { border-color: var(--ink-3); }
+.btn.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+section { padding: 36px 0; border-top: 1px solid var(--border); }
+h2 { font-size: 26px; margin: 0 0 6px; letter-spacing: -.01em; }
+.sub { color: var(--ink-2); margin: 0 0 22px; max-width: 760px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; margin: 28px 0 8px; }
+.tile { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 18px; }
+.tile .k { font-size: 13px; color: var(--ink-2); }
+.tile .v { font-size: 34px; font-weight: 700; letter-spacing: -.02em; margin: 4px 0 2px; font-variant-numeric: tabular-nums; }
+.tile .n { font-size: 13px; color: var(--ink-3); }
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px; }
+.chart { position: relative; height: 320px; }
+.chart.tall { height: 420px; }
+.chart.short { height: 240px; }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+.controls { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+label { font-size: 13px; color: var(--ink-2); display: flex; flex-direction: column; gap: 4px; }
+select { font: inherit; font-size: 15px; padding: 7px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--ink); min-width: 200px; }
+.legend { display: flex; gap: 18px; flex-wrap: wrap; font-size: 14px; color: var(--ink-2); margin: 0 0 10px; }
+.legend i { display: inline-block; width: 18px; height: 3px; border-radius: 2px; vertical-align: middle; margin-right: 6px; }
+.legend i.dash { background: repeating-linear-gradient(90deg, var(--naive) 0 5px, transparent 5px 8px) !important; }
+.stat-line { font-size: 15px; color: var(--ink-2); margin-top: 12px; }
+.stat-line b { color: var(--ink); font-variant-numeric: tabular-nums; }
+.compare { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 16px; }
+.compare .tile .v { font-size: 26px; }
+.badge { display: inline-block; font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--model); margin-left: 6px; vertical-align: middle; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
+th, td { text-align: right; padding: 9px 10px; border-bottom: 1px solid var(--border); }
+th:first-child, td:first-child { text-align: left; }
+th { color: var(--ink-2); font-weight: 500; }
+.table-scroll { overflow-x: auto; }
+details { margin-top: 12px; }
+summary { cursor: pointer; color: var(--ink-2); font-size: 14px; }
+.note { font-size: 14px; color: var(--ink-3); margin-top: 12px; }
+ol.steps { padding-left: 20px; color: var(--ink-2); }
+ol.steps li { margin-bottom: 8px; }
+ol.steps b { color: var(--ink); }
+code { font: 13px 'JetBrains Mono', monospace; background: var(--bg); border: 1px solid var(--border); padding: 1px 5px; border-radius: 4px; }
+footer { padding: 28px 0 48px; border-top: 1px solid var(--border); color: var(--ink-3); font-size: 14px; }
+footer a { color: var(--ink-2); }
+.theme-toggle { position: fixed; top: 14px; right: 14px; }
+@media (max-width: 560px) { .compare { grid-template-columns: 1fr; } .chart { height: 280px; } select { min-width: 0; width: 100%; } .controls label { flex: 1 1 100%; } }
+</style>
+</head>
+<body>
+<button class="btn theme-toggle" id="theme" aria-label="Toggle dark mode">◐</button>
+
+<div class="wrap">
+<header>
+  <div class="eyebrow">Data science · time-series forecasting</div>
+  <h1>Load<span>Lens</span></h1>
+  <p class="lede">Forecasting the next 48 hours of electricity use for 10 real buildings in Washington, DC. Tested the way it would run in production, then explained in business terms.</p>
+  <div class="links">
+    <a class="btn primary" href="https://github.com/etisamhaq/energy-optimization-ai-ml-project">View the code on GitHub</a>
+    <a class="btn" href="#method">How it was tested</a>
+  </div>
+  <div class="tiles" id="tiles"></div>
+</header>
+
+<section>
+  <h2>See a forecast</h2>
+  <p class="sub">Each forecast only sees data from before its start time, then predicts hour by hour, feeding its own predictions back in. Pick any of the <span id="nf"></span> backtest forecasts.</p>
+  <div class="card">
+    <div class="controls">
+      <label>Building <select id="building"></select></label>
+      <label>Forecast starts <select id="origin"></select></label>
+    </div>
+    <div class="legend"><span><i style="background:var(--actual)"></i>Actual</span><span><i style="background:var(--model)"></i>Model forecast</span><span><i class="dash"></i>Naive: same hour last week</span></div>
+    <div class="chart"><canvas id="forecastChart" aria-label="Actual vs forecast electricity use"></canvas></div>
+    <div class="stat-line" id="forecastStats"></div>
+  </div>
+</section>
+
+<section>
+  <h2>The bug that was in the data, not the model</h2>
+  <p class="sub">The first backtest made the model look no better than the rule of thumb. A handful of forecasts were off by 50–90%, all starting on the <b>same dates in different buildings</b>. The cause: four buildings' meters drop to near zero at the same hour and recover days later, a shared data-logger failure. The model trusted the broken readings and forecast an empty building.</p>
+  <div class="card">
+    <div class="legend"><span><i style="background:var(--naive)"></i>Raw meter reading</span><span><i style="background:var(--model)"></i>After outage repair</span></div>
+    <div class="chart"><canvas id="outageChart" aria-label="Meter outage, raw vs repaired"></canvas></div>
+    <p class="note" id="outageNote"></p>
+  </div>
+  <div class="compare" id="beforeAfter"></div>
+  <p class="note">Fix: a reading below 5% of the building's trailing 4-week median is flagged as an outage, repaired from the same hour a week earlier before it reaches the model, excluded from training, and never used to score a forecast.</p>
+</section>
+
+<section>
+  <h2>Where it is strong, where it fails</h2>
+  <p class="sub">Error is WAPE: total absolute error divided by total consumption. Lower is better.</p>
+  <div class="card">
+    <div class="legend"><span><i style="background:var(--model)"></i>Model</span><span><i style="background:var(--naive)"></i>Naive baseline</span></div>
+    <div class="chart tall"><canvas id="buildingChart" aria-label="Forecast error by building"></canvas></div>
+    <details><summary>Show as a table</summary><div class="table-scroll"><table id="buildingTable"></table></div></details>
+  </div>
+  <div class="grid2" style="margin-top:16px">
+    <div class="card"><h3 style="margin:0 0 10px;font-size:16px">By hour of day</h3><div class="chart short"><canvas id="hourChart" aria-label="Error by hour of day"></canvas></div></div>
+    <div class="card"><h3 style="margin:0 0 10px;font-size:16px">By forecast horizon</h3><div class="chart short"><canvas id="horizonChart" aria-label="Error by forecast horizon"></canvas></div></div>
+    <div class="card"><h3 style="margin:0 0 10px;font-size:16px">Weekdays vs weekends</h3><div class="chart short"><canvas id="dayChart" aria-label="Error weekday vs weekend"></canvas></div></div>
+    <div class="card"><h3 style="margin:0 0 10px;font-size:16px">By outdoor temperature</h3><div class="chart short"><canvas id="tempChart" aria-label="Error by temperature"></canvas></div></div>
+  </div>
+</section>
+
+<section>
+  <h2>What it means for a facility manager</h2>
+  <p class="sub">Peak demand sets demand charges, so finding each day's peak matters as much as average accuracy.</p>
+  <div class="tiles" id="peakTiles" style="margin-top:0"></div>
+  <p class="note">Honest reading: pinning the exact peak hour is hard, and the model is only modestly better than the baseline at it, because these buildings run on a flat plateau through the working day: on about half of the days, an hour more than an hour away from the peak is within 3% of it. Its clearer advantage is the <b>size</b> of the peak and the total energy, which is what purchasing and demand planning depend on.</p>
+  <div class="card" style="margin-top:16px">
+    <h3 style="margin:0 0 4px;font-size:16px">What the error is worth <span class="badge">scenario</span></h3>
+    <p class="note" style="margin:0 0 12px">If energy is bought ahead on the forecast, each kWh of error is settled at a worse price. The kWh of error are <b>measured</b> in the backtest; the price per kWh of error is an <b>assumption</b>, shown as a range.</p>
+    <div class="table-scroll"><table id="costTable"></table></div>
+  </div>
+</section>
+
+<section>
+  <h2>What drives the forecast</h2>
+  <p class="sub">Mean absolute SHAP value per feature, for the weighted ensemble. The model predicts consumption relative to each building's previous-week average, so effects read as a share of a typical hour. That is also why one model serves buildings whose sizes differ by 100×.</p>
+  <div class="card"><div class="chart tall"><canvas id="shapChart" aria-label="SHAP feature importance"></canvas></div></div>
+</section>
+
+<section id="method">
+  <h2>How it was tested</h2>
+  <ol class="steps">
+    <li><b>Real data.</b> 10 buildings at one Washington, DC site from the Building Data Genome Project 2 (hourly meters, 2016–2017), with real hourly weather from Open-Meteo.</li>
+    <li><b>Model.</b> A weighted ensemble of XGBoost, LightGBM and Random Forest, trained on the earlier data with lag, rolling, calendar and weather features.</li>
+    <li><b>Rolling-origin backtest.</b> <span id="methodN"></span> recursive 48-hour forecasts from start dates spread across the held-out autumn–winter 2017 period. No forecast sees the future.</li>
+    <li><b>Honest uncertainty.</b> 95% intervals by bootstrapping whole forecasts (hours inside one forecast are not independent).</li>
+    <li><b>Reproducible.</b> <code>make collect-real preprocess train backtest report</code> regenerates every number on this page.</li>
+  </ol>
+</section>
+</div>
+
+<footer><div class="wrap">Data: Building Data Genome Project 2 (CC BY 4.0), Open-Meteo. Built by Etisam Ul Haq · <a href="https://github.com/etisamhaq/energy-optimization-ai-ml-project">Source on GitHub</a></div></footer>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<script>
+(function () {
+  const root = document.documentElement;
+  try { const t = localStorage.getItem('theme'); if (t) root.dataset.theme = t; } catch (e) {}
+  const css = n => getComputedStyle(root).getPropertyValue(n).trim();
+  const fmt = (v, d = 1) => Number(v).toFixed(d);
+  const money = v => '$' + Math.round(v).toLocaleString('en-US');
+  let D, charts = {};
+
+  function base(extra = {}) {
+    return {
+      responsive: true, maintainAspectRatio: false, animation: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: { legend: { display: false }, tooltip: { backgroundColor: css('--surface'), titleColor: css('--ink'), bodyColor: css('--ink-2'), borderColor: css('--border'), borderWidth: 1, padding: 10 } },
+      scales: {
+        x: { grid: { display: false }, ticks: { color: css('--ink-3'), maxRotation: 0, autoSkipPadding: 14 }, border: { color: css('--border') } },
+        y: { grid: { color: css('--grid') }, ticks: { color: css('--ink-3') }, border: { display: false }, beginAtZero: true }
+      },
+      ...extra
+    };
+  }
+  function make(id, config) { if (charts[id]) charts[id].destroy(); charts[id] = new Chart(document.getElementById(id), config); }
+  const line = (label, data, color, dash) => ({ label, data, borderColor: color, backgroundColor: color, borderWidth: 2, pointRadius: 0, pointHoverRadius: 4, borderDash: dash || [], tension: 0.2 });
+  const bar = (label, data, color) => ({ label, data, backgroundColor: color, borderRadius: 4, borderSkipped: 'start', maxBarThickness: 22, categoryPercentage: 0.7, barPercentage: 0.9 });
+  const pct = { callbacks: { label: c => ` ${c.dataset.label}: ${fmt(c.parsed.y ?? c.parsed.x)}%` } };
+
+  function tiles() {
+    const h = D.headline;
+    const [lo, hi] = h.improvement_points_ci95;
+    document.getElementById('tiles').innerHTML = [
+      ['Model forecast error', fmt(h.ensemble_wape) + '%', `95% CI ${fmt(h.ensemble_wape_ci95[0])}–${fmt(h.ensemble_wape_ci95[1])}%`],
+      ['Naive baseline error', fmt(h.naive_wape) + '%', 'same hour last week'],
+      ['Improvement', fmt(h.naive_wape - h.ensemble_wape) + ' pts', `95% CI ${fmt(lo)} to ${fmt(hi)} points`],
+      ['Buildings where the model wins', `${h.buildings_beating_naive}/${h.n_buildings}`, `${h.n_forecasts} forecasts × ${h.horizon_hours} h`],
+    ].map(([k, v, n]) => `<div class="tile"><div class="k">${k}</div><div class="v">${v}</div><div class="n">${n}</div></div>`).join('');
+    document.getElementById('nf').textContent = h.n_forecasts;
+    document.getElementById('methodN').textContent = h.n_forecasts;
+  }
+
+  function forecastControls() {
+    const b = document.getElementById('building'), o = document.getElementById('origin');
+    b.innerHTML = Object.entries(D.buildings).map(([id, name]) => `<option value="${id}">${name}</option>`).join('');
+    const fillOrigins = () => { o.innerHTML = Object.keys(D.forecasts[b.value]).map(d => `<option>${d}</option>`).join(''); };
+    b.onchange = () => { fillOrigins(); drawForecast(); };
+    o.onchange = drawForecast;
+    b.value = D.default_forecast.building;
+    fillOrigins();
+    o.value = D.default_forecast.origin;
+  }
+
+  function drawForecast() {
+    const f = D.forecasts[document.getElementById('building').value][document.getElementById('origin').value];
+    const start = new Date(document.getElementById('origin').value + 'T00:00:00');
+    const labels = f.h.map(h => { const t = new Date(start.getTime() + (h - 1) * 3600e3); return t.toLocaleDateString('en-US', { weekday: 'short' }) + ' ' + String(t.getHours()).padStart(2, '0') + ':00'; });
+    make('forecastChart', { type: 'line', data: { labels, datasets: [line('Actual', f.actual, css('--actual')), line('Model', f.model, css('--model')), line('Naive', f.naive, css('--naive'), [5, 3])] },
+      options: base({ plugins: { ...base().plugins, tooltip: { ...base().plugins.tooltip, callbacks: { label: c => ` ${c.dataset.label}: ${fmt(c.parsed.y)} kWh` } } }, scales: { ...base().scales, y: { ...base().scales.y, title: { display: true, text: 'kWh per hour', color: css('--ink-3') } } } }) });
+    const sum = a => a.reduce((s, v) => s + v, 0);
+    const err = k => sum(f[k].map((v, i) => Math.abs(v - f.actual[i]))) / sum(f.actual) * 100;
+    document.getElementById('forecastStats').innerHTML = `This forecast: model error <b>${fmt(err('model'))}%</b> · naive error <b>${fmt(err('naive'))}%</b>`;
+  }
+
+  function outage() {
+    const o = D.outage;
+    const labels = o.t.map(t => { const d = new Date(t.replace(' ', 'T')); return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }); });
+    make('outageChart', { type: 'line', data: { labels, datasets: [line('Raw meter', o.raw, css('--naive')), line('Repaired', o.repaired, css('--model'))] },
+      options: base({ plugins: { ...base().plugins, tooltip: { ...base().plugins.tooltip, callbacks: { title: i => o.t[i[0].dataIndex], label: c => ` ${c.dataset.label}: ${fmt(c.parsed.y)} kWh` } } }, scales: { ...base().scales, x: { ...base().scales.x, ticks: { ...base().scales.x.ticks, maxTicksLimit: 12 } } } }) });
+    document.getElementById('outageNote').textContent = `${o.building}, late August 2017: the meter reads near zero for four days while the building is clearly in use. ${o.outage_hours_total.toLocaleString()} hours of this building's 2016–2017 readings were flagged as outages.`;
+    const b = D.before_fix, h = D.headline;
+    document.getElementById('beforeAfter').innerHTML = `
+      <div class="tile"><div class="k">Before the fix</div><div class="v">${fmt(b.ensemble_wape)}% vs ${fmt(b.naive_wape)}%</div><div class="n">model vs naive · improvement CI ${fmt(b.improvement_points_ci95[0])} to ${fmt(b.improvement_points_ci95[1])} pts · wins ${b.buildings_beating_naive}/10</div></div>
+      <div class="tile"><div class="k">After the fix</div><div class="v">${fmt(h.ensemble_wape)}% vs ${fmt(h.naive_wape)}%</div><div class="n">model vs naive · improvement CI ${fmt(h.improvement_points_ci95[0])} to ${fmt(h.improvement_points_ci95[1])} pts · wins ${h.buildings_beating_naive}/10</div></div>`;
+  }
+
+  function breakdowns() {
+    const B = D.breakdowns;
+    const rows = [...B.by_building].sort((a, b) => a.ensemble_wape - b.ensemble_wape);
+    const names = rows.map(r => D.buildings[r.building_id]);
+    make('buildingChart', { type: 'bar', data: { labels: names, datasets: [bar('Model', rows.map(r => r.ensemble_wape), css('--model')), bar('Naive', rows.map(r => r.naive_wape), css('--naive'))] },
+      options: base({ indexAxis: 'y', interaction: { mode: 'index', axis: 'y', intersect: false }, plugins: { ...base().plugins, tooltip: { ...base().plugins.tooltip, callbacks: { label: c => ` ${c.dataset.label}: ${fmt(c.parsed.x)}%` } } },
+        scales: { x: { ...base().scales.y, title: { display: true, text: 'WAPE (%)', color: css('--ink-3') } }, y: { ...base().scales.x, grid: { display: false } } } }) });
+    document.getElementById('buildingTable').innerHTML = '<tr><th>Building</th><th>Model WAPE</th><th>Naive WAPE</th><th>Improvement</th></tr>' +
+      rows.map(r => `<tr><td>${D.buildings[r.building_id]}</td><td>${fmt(r.ensemble_wape)}%</td><td>${fmt(r.naive_wape)}%</td><td>${fmt(r.naive_wape - r.ensemble_wape)} pts</td></tr>`).join('');
+    const pair = (id, data, key, labelFn) => make(id, { type: 'bar', data: { labels: data.map(r => labelFn ? labelFn(r[key]) : r[key]), datasets: [bar('Model', data.map(r => r.ensemble_wape), css('--model')), bar('Naive', data.map(r => r.naive_wape), css('--naive'))] }, options: base({ plugins: { ...base().plugins, tooltip: { ...base().plugins.tooltip, ...pct } }, scales: { ...base().scales, x: { ...base().scales.x, ticks: { ...base().scales.x.ticks, autoSkip: false, font: { size: 11 } } } } }) });
+    const hours = B.by_hour;
+    make('hourChart', { type: 'line', data: { labels: hours.map(r => String(r.hour).padStart(2, '0') + ':00'), datasets: [line('Model', hours.map(r => r.ensemble_wape), css('--model')), line('Naive', hours.map(r => r.naive_wape), css('--naive'))] }, options: base({ plugins: { ...base().plugins, tooltip: { ...base().plugins.tooltip, ...pct } } }) });
+    pair('horizonChart', B.by_forecast_day, 'forecast_day');
+    pair('dayChart', B.by_day_type, 'day_type', s => s[0].toUpperCase() + s.slice(1));
+    if (B.by_temperature) pair('tempChart', B.by_temperature, 'temperature_band');
+  }
+
+  function business() {
+    const p = D.peak;
+    document.getElementById('peakTiles').innerHTML = [
+      ['Daily peak hour found (±1 h)', p.peak_hour_hit_rate_pct.ensemble + '%', `naive: ${p.peak_hour_hit_rate_pct.naive}% · ${p.building_days} building-days`],
+      ['Median error in peak size', p.median_peak_size_error_pct.ensemble + '%', `naive: ${p.median_peak_size_error_pct.naive}%`],
+      ['Less forecast error per building', D.cost.annual_error_kwh_avoided_per_building.toLocaleString() + ' kWh', 'per year, measured vs naive'],
+    ].map(([k, v, n]) => `<div class="tile"><div class="k">${k}</div><div class="v">${v}</div><div class="n">${n}</div></div>`).join('');
+    const c = D.cost;
+    document.getElementById('costTable').innerHTML = `<tr><th>Assumed $ per kWh of error</th><th>Error cost / building / yr, model</th><th>…naive</th><th>Saving / building / yr</th><th>Saving, ${c.n_buildings} buildings</th></tr>` +
+      c.scenarios.map(s => `<tr><td>$${s.price_usd_per_kwh_error.toFixed(2)}</td><td>${money(s.annual_cost_per_building_ensemble)}</td><td>${money(s.annual_cost_per_building_naive)}</td><td>${money(s.annual_saving_per_building)}</td><td>${money(s.annual_saving_portfolio)}</td></tr>`).join('');
+  }
+
+  function shap() {
+    const rows = D.shap;
+    make('shapChart', { type: 'bar', data: { labels: rows.map(r => r.feature.replace('energy_consumption_kwh_', 'consumption ').replace(/_/g, ' ')), datasets: [{ label: 'Mean |SHAP|', data: rows.map(r => r.mean_abs_shap), backgroundColor: css('--model'), borderRadius: 4, borderSkipped: 'start', maxBarThickness: 20 }] },
+      options: base({ indexAxis: 'y', interaction: { mode: 'nearest', axis: 'y', intersect: false }, plugins: { ...base().plugins, tooltip: { ...base().plugins.tooltip, callbacks: { label: c => ` ${fmt(c.parsed.x * 100)}% of a typical hour` } } },
+        scales: { x: { ...base().scales.y, title: { display: true, text: 'Average effect, share of the building\'s typical hour', color: css('--ink-3') } }, y: { ...base().scales.x, grid: { display: false } } } }) });
+  }
+
+  function drawAll() { Chart.defaults.font.family = 'Inter, system-ui, sans-serif'; Chart.defaults.color = css('--ink-3'); drawForecast(); outage(); breakdowns(); business(); shap(); }
+
+  document.getElementById('theme').onclick = () => {
+    const dark = getComputedStyle(root).colorScheme === 'dark';
+    root.dataset.theme = dark ? 'light' : 'dark';
+    try { localStorage.setItem('theme', root.dataset.theme); } catch (e) {}
+    drawAll();
+  };
+  matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => { if (!root.dataset.theme) drawAll(); });
+
+  fetch('data.json').then(r => r.json()).then(d => { D = d; tiles(); forecastControls(); drawAll(); });
+})();
+</script>
+</body>
+</html>

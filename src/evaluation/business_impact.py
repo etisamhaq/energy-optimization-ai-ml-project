@@ -136,6 +136,8 @@ def shap_importance(data_dir: str, models_dir: str, sample: int, seed: int = 42)
     so the ensemble's SHAP values are the same weighted average of each model's.
     Units: the model predicts consumption relative to the building's previous-week
     mean, so a value of 0.10 moves the forecast by 10% of a typical hour.
+    XGBoost and LightGBM use exact TreeSHAP; the random forest uses the fast Saabas
+    approximation, because exact SHAP on its deep trees takes hours.
     """
     import shap
     from src.models.train import ModelTrainer
@@ -151,7 +153,15 @@ def shap_importance(data_dir: str, models_dir: str, sample: int, seed: int = 42)
     for name, weight in ensemble.weights.items():
         estimator = ensemble.models[name].model
         logger.info(f"SHAP for {name} (weight {weight:.3f}) on {len(X)} rows")
-        combined += weight * shap.TreeExplainer(estimator).shap_values(X, check_additivity=False)
+        explainer = shap.TreeExplainer(estimator)
+        if name == 'random_forest':
+            # Exact TreeSHAP costs trees x leaves x depth^2 per row; for 200 deep forest trees
+            # that is hours. Saabas attributions (approximate=True) are still additive per
+            # feature and combine with the exact values of the boosted models.
+            values = explainer.shap_values(X, approximate=True)
+        else:
+            values = explainer.shap_values(X, check_additivity=False)
+        combined += weight * values
     importance = pd.DataFrame({'feature': X.columns, 'mean_abs_shap': np.abs(combined).mean(axis=0)})
     return importance.sort_values('mean_abs_shap', ascending=False).reset_index(drop=True), X, combined
 

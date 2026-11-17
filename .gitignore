@@ -119,7 +119,7 @@ venv.bak/
 .ropeproject
 
 # mkdocs documentation
-/site
+# /site is the static results page served by Vercel (not MkDocs output), so it is tracked
 
 # mypy
 .mypy_cache/

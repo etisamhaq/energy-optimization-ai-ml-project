@@ -1,0 +1,87 @@
+{
+  "ensemble_wape_ci95": [
+    7.38,
+    9.26
+  ],
+  "naive_wape_ci95": [
+    11.42,
+    14.28
+  ],
+  "improvement_points_ci95": [
+    3.54,
+    5.65
+  ],
+  "n_boot": 2000,
+  "n_buildings": 10,
+  "n_forecasts": 200,
+  "horizon_hours": 48,
+  "forecast_hours": 9567,
+  "excluded_meter_outage_hours": 33,
+  "origins": [
+    "2017-08-09",
+    "2017-08-17",
+    "2017-08-24",
+    "2017-09-01",
+    "2017-09-08",
+    "2017-09-16",
+    "2017-09-23",
+    "2017-10-01",
+    "2017-10-08",
+    "2017-10-16",
+    "2017-10-23",
+    "2017-10-31",
+    "2017-11-07",
+    "2017-11-15",
+    "2017-11-22",
+    "2017-11-30",
+    "2017-12-07",
+    "2017-12-15",
+    "2017-12-22",
+    "2017-12-30"
+  ],
+  "ensemble_wape": 8.22170816136341,
+  "naive_wape": 12.7528500443753,
+  "buildings_beating_naive": 10,
+  "per_building": {
+    "Rat_assembly_Adolfo": {
+      "ensemble_wape": 16.48,
+      "naive_wape": 33.75
+    },
+    "Rat_education_Beverly": {
+      "ensemble_wape": 11.04,
+      "naive_wape": 17.37
+    },
+    "Rat_education_Elisa": {
+      "ensemble_wape": 22.52,
+      "naive_wape": 35.85
+    },
+    "Rat_education_Kathryn": {
+      "ensemble_wape": 10.98,
+      "naive_wape": 12.66
+    },
+    "Rat_education_Keith": {
+      "ensemble_wape": 9.97,
+      "naive_wape": 15.59
+    },
+    "Rat_education_Kelsey": {
+      "ensemble_wape": 11.66,
+      "naive_wape": 19.77
+    },
+    "Rat_education_Lee": {
+      "ensemble_wape": 9.97,
+      "naive_wape": 13.26
+    },
+    "Rat_education_Theo": {
+      "ensemble_wape": 10.67,
+      "naive_wape": 14.5
+    },
+    "Rat_health_Tanya": {
+      "ensemble_wape": 9.91,
+      "naive_wape": 18.67
+    },
+    "Rat_office_Colby": {
+      "ensemble_wape": 5.56,
+      "naive_wape": 10.0
+    }
+  }
+}

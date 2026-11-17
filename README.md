@@ -1,25 +1,29 @@
-# Energy Optimization ML: Building Energy Forecasting & Savings Recommendations
+# LoadLens: Building Energy Forecasting & Analytics
 
-Forecasts each building's hourly electricity use from real meter and weather data, then recommends measures to cut energy use, cost and CO₂, with every savings estimate traceable to its assumptions.
+Forecasts each building's hourly electricity use for the next 48 hours from real meter and weather data, tests it the way it would run in production, and translates the result into what a facility manager can act on: peak hours, the cost of forecast error, and what drives consumption.
 
+[![tests](https://github.com/etisamhaq/energy-optimization-ai-ml-project/actions/workflows/tests.yml/badge.svg)](https://github.com/etisamhaq/energy-optimization-ai-ml-project/actions/workflows/tests.yml)
 ![Python](https://img.shields.io/badge/Python-3.10+-blue.svg)
 ![XGBoost](https://img.shields.io/badge/XGBoost%20%7C%20LightGBM%20%7C%20RF-ensemble-orange.svg)
 ![FastAPI](https://img.shields.io/badge/API-FastAPI-009688.svg)
 ![License](https://img.shields.io/badge/License-MIT-lightgrey.svg)
 
+**[See the interactive results →](https://energy-optimization-ai-ml-project.vercel.app/)**
+
 ## At a Glance
 
-**Tested on real data:** 10 buildings in Washington, DC from the [Building Data Genome Project 2](https://github.com/buds-lab/building-data-genome-project-2), with real hourly weather. The models were trained on 2016 to mid-2017, then made 40 recursive 48-hour forecasts on held-out autumn 2017 data.
+**Tested on real data:** 10 buildings in Washington, DC from the [Building Data Genome Project 2](https://github.com/buds-lab/building-data-genome-project-2), with real hourly weather. The models were trained on 2016 to mid-2017, then made **200 recursive 48-hour forecasts** (20 start dates per building, August–December 2017) on held-out data. No forecast sees the future.
 
-| Model | Forecast error (WAPE) |
-|---|---|
-| **Ensemble** (XGBoost + LightGBM + Random Forest) | **17.4%** |
-| Naive baseline (same hour last week) | 21.7% |
+| Model | Forecast error (WAPE) | 95% interval |
+|---|---|---|
+| **Ensemble** (XGBoost + LightGBM + Random Forest) | **8.2%** | 7.4–9.3% |
+| Naive baseline (same hour last week) | 12.8% | 11.4–14.3% |
 
-- The ensemble beats the baseline on **all 10 buildings** (per-building error 5.5%–21.4%).
-- One model serves buildings of very different sizes, because it predicts consumption relative to each building's own previous week.
-- **Savings recommendations** cover peak-load shifting, HVAC setpoints, start-up scheduling, LED and HVAC upgrades, and solar. Each report shows its payback, ROI and the rule-of-thumb assumptions behind it. These are **planning estimates, not measured savings**.
-- **Production-ready serving:** FastAPI with API-key auth, rate limiting, readiness checks and Prometheus metrics; a Streamlit dashboard; Docker Compose; and a test suite.
+- The ensemble beats the baseline on **all 10 buildings** (per-building error 5.6%–22.5%). The improvement, 4.5 points, has a 95% interval of **3.5 to 5.7 points**, from bootstrapping whole forecasts.
+- **The biggest win was a data fix, not a model change.** The first backtest showed the model barely beating the rule of thumb (12.9% vs 13.5%, interval crossing zero). Error analysis traced it to a shared meter-logger outage: four buildings read near zero for days at a time. `src/data/quality.py` now flags and repairs those readings before they reach training, forecasting or scoring.
+- **Business view** (`make report`): daily peak-hour accuracy, the annual cost of forecast error under stated price assumptions, error by hour, horizon, day type and temperature, and SHAP explanations of what drives each forecast.
+- **Savings recommendations** cover peak-load shifting, HVAC setpoints, start-up scheduling, LED and HVAC upgrades, and solar. These are **planning estimates, not measured savings**.
+- **Production-ready serving:** FastAPI with API-key auth, rate limiting, readiness checks and Prometheus metrics; a Streamlit dashboard; Docker Compose; and a test suite run in CI on every push.
 
 **Run it on real data:**
 
@@ -27,6 +31,7 @@ Forecasts each building's hourly electricity use from real meter and weather dat
 pip install -r requirements.txt -c constraints.txt && pip install -e .
 make collect-real   # downloads BDG2 meters for 10 DC buildings (~175 MB, once) + Open-Meteo weather
 make preprocess && make train
+make backtest report   # 200-forecast backtest, error analysis, cost scenario, SHAP -> reports/
 streamlit run src/visualization/dashboard.py
 ```
 
@@ -196,15 +201,21 @@ streamlit run src/visualization/dashboard.py
 ## Performance Metrics
 
 Measured on **real data**: 10 BDG2 buildings in Washington, DC, with real weather. The models were
-trained on 2016 to mid-2017, then made 40 recursive 48-hour forecasts in the held-out autumn 2017
-period. The error is WAPE: total absolute error divided by total consumption.
+trained on 2016 to mid-2017, then made 200 recursive 48-hour forecasts (20 start dates per building,
+9 Aug to 30 Dec 2017) on held-out data. The error is WAPE: total absolute error divided by total
+consumption. Hours where the meter itself had failed are not scored. `make backtest` reproduces this.
 
-| Model | WAPE |
-|-------|------|
-| Ensemble (XGBoost + LightGBM + Random Forest) | **17.4%** |
-| Naive baseline (same hour last week) | 21.7% |
+| Model | WAPE | 95% interval |
+|-------|------|------|
+| Ensemble (XGBoost + LightGBM + Random Forest) | **8.2%** | 7.4–9.3% |
+| Naive baseline (same hour last week) | 12.8% | 11.4–14.3% |
 
-The ensemble beats the baseline on all 10 buildings (per-building WAPE 5.5%–21.4%).
+The ensemble beats the baseline on all 10 buildings (per-building WAPE 5.6%–22.5%). Intervals come
+from bootstrapping whole forecasts, since hours inside one forecast are not independent.
+
+An earlier version of this README reported 17.4% vs 21.7% from 40 forecasts whose start dates were
+not recorded. With 40 forecasts the result swung by several points depending on which dates were
+picked, so the backtest is now committed code with 200 forecasts and confidence intervals.
 Accuracy on your buildings will differ, so re-run this backtest on your own data before relying on the forecasts.
 
 Predictions need at least one week of hourly history before the start date and must start within

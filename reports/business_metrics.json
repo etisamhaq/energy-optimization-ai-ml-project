@@ -1,0 +1,362 @@
+{
+  "overall": {
+    "ensemble_wape": 8.22,
+    "naive_wape": 12.75
+  },
+  "breakdowns": {
+    "by_forecast_day": [
+      {
+        "forecast_day": "day 1 (0-24 h)",
+        "ensemble_wape": 7.01,
+        "naive_wape": 11.97,
+        "hours": 4797.0
+      },
+      {
+        "forecast_day": "day 2 (25-48 h)",
+        "ensemble_wape": 9.47,
+        "naive_wape": 13.56,
+        "hours": 4770.0
+      }
+    ],
+    "by_day_type": [
+      {
+        "day_type": "weekday",
+        "ensemble_wape": 8.18,
+        "naive_wape": 12.26,
+        "hours": 6700.0
+      },
+      {
+        "day_type": "weekend",
+        "ensemble_wape": 8.33,
+        "naive_wape": 14.0,
+        "hours": 2867.0
+      }
+    ],
+    "by_hour": [
+      {
+        "hour": "0",
+        "ensemble_wape": 5.01,
+        "naive_wape": 10.65,
+        "hours": 396.0
+      },
+      {
+        "hour": "1",
+        "ensemble_wape": 5.34,
+        "naive_wape": 10.34,
+        "hours": 399.0
+      },
+      {
+        "hour": "2",
+        "ensemble_wape": 5.52,
+        "naive_wape": 10.5,
+        "hours": 399.0
+      },
+      {
+        "hour": "3",
+        "ensemble_wape": 5.57,
+        "naive_wape": 10.68,
+        "hours": 399.0
+      },
+      {
+        "hour": "4",
+        "ensemble_wape": 6.39,
+        "naive_wape": 11.0,
+        "hours": 399.0
+      },
+      {
+        "hour": "5",
+        "ensemble_wape": 7.18,
+        "naive_wape": 11.73,
+        "hours": 399.0
+      },
+      {
+        "hour": "6",
+        "ensemble_wape": 7.93,
+        "naive_wape": 12.53,
+        "hours": 399.0
+      },
+      {
+        "hour": "7",
+        "ensemble_wape": 8.32,
+        "naive_wape": 12.52,
+        "hours": 399.0
+      },
+      {
+        "hour": "8",
+        "ensemble_wape": 8.27,
+        "naive_wape": 13.13,
+        "hours": 399.0
+      },
+      {
+        "hour": "9",
+        "ensemble_wape": 8.79,
+        "naive_wape": 13.47,
+        "hours": 399.0
+      },
+      {
+        "hour": "10",
+        "ensemble_wape": 9.33,
+        "naive_wape": 13.89,
+        "hours": 399.0
+      },
+      {
+        "hour": "11",
+        "ensemble_wape": 8.99,
+        "naive_wape": 14.08,
+        "hours": 399.0
+      },
+      {
+        "hour": "12",
+        "ensemble_wape": 8.52,
+        "naive_wape": 13.37,
+        "hours": 399.0
+      },
+      {
+        "hour": "13",
+        "ensemble_wape": 8.6,
+        "naive_wape": 13.31,
+        "hours": 399.0
+      },
+      {
+        "hour": "14",
+        "ensemble_wape": 8.55,
+        "naive_wape": 13.65,
+        "hours": 399.0
+      },
+      {
+        "hour": "15",
+        "ensemble_wape": 9.18,
+        "naive_wape": 14.7,
+        "hours": 399.0
+      },
+      {
+        "hour": "16",
+        "ensemble_wape": 9.41,
+        "naive_wape": 14.62,
+        "hours": 399.0
+      },
+      {
+        "hour": "17",
+        "ensemble_wape": 10.56,
+        "naive_wape": 15.54,
+        "hours": 400.0
+      },
+      {
+        "hour": "18",
+        "ensemble_wape": 9.34,
+        "naive_wape": 12.49,
+        "hours": 398.0
+      },
+      {
+        "hour": "19",
+        "ensemble_wape": 8.85,
+        "naive_wape": 12.45,
+        "hours": 398.0
+      },
+      {
+        "hour": "20",
+        "ensemble_wape": 8.62,
+        "naive_wape": 12.71,
+        "hours": 398.0
+      },
+      {
+        "hour": "21",
+        "ensemble_wape": 9.08,
+        "naive_wape": 12.05,
+        "hours": 398.0
+      },
+      {
+        "hour": "22",
+        "ensemble_wape": 9.12,
+        "naive_wape": 11.89,
+        "hours": 398.0
+      },
+      {
+        "hour": "23",
+        "ensemble_wape": 8.26,
+        "naive_wape": 11.67,
+        "hours": 397.0
+      }
+    ],
+    "by_building": [
+      {
+        "building_id": "Rat_assembly_Adolfo",
+        "ensemble_wape": 16.48,
+        "naive_wape": 33.75,
+        "hours": 960.0
+      },
+      {
+        "building_id": "Rat_education_Beverly",
+        "ensemble_wape": 11.04,
+        "naive_wape": 17.37,
+        "hours": 953.0
+      },
+      {
+        "building_id": "Rat_education_Elisa",
+        "ensemble_wape": 22.52,
+        "naive_wape": 35.85,
+        "hours": 960.0
+      },
+      {
+        "building_id": "Rat_education_Kathryn",
+        "ensemble_wape": 10.98,
+        "naive_wape": 12.66,
+        "hours": 960.0
+      },
+      {
+        "building_id": "Rat_education_Keith",
+        "ensemble_wape": 9.97,
+        "naive_wape": 15.59,
+        "hours": 960.0
+      },
+      {
+        "building_id": "Rat_education_Kelsey",
+        "ensemble_wape": 11.66,
+        "naive_wape": 19.77,
+        "hours": 960.0
+      },
+      {
+        "building_id": "Rat_education_Lee",
+        "ensemble_wape": 9.97,
+        "naive_wape": 13.26,
+        "hours": 960.0
+      },
+      {
+        "building_id": "Rat_education_Theo",
+        "ensemble_wape": 10.67,
+        "naive_wape": 14.5,
+        "hours": 941.0
+      },
+      {
+        "building_id": "Rat_health_Tanya",
+        "ensemble_wape": 9.91,
+        "naive_wape": 18.67,
+        "hours": 960.0
+      },
+      {
+        "building_id": "Rat_office_Colby",
+        "ensemble_wape": 5.56,
+        "naive_wape": 10.0,
+        "hours": 953.0
+      }
+    ],
+    "by_temperature": [
+      {
+        "temperature_band": "< 5 \u00b0C",
+        "ensemble_wape": 7.13,
+        "naive_wape": 12.22,
+        "hours": 1814.0
+      },
+      {
+        "temperature_band": "5-15 \u00b0C",
+        "ensemble_wape": 8.22,
+        "naive_wape": 12.87,
+        "hours": 3103.0
+      },
+      {
+        "temperature_band": "15-25 \u00b0C",
+        "ensemble_wape": 8.61,
+        "naive_wape": 13.13,
+        "hours": 3760.0
+      },
+      {
+        "temperature_band": "> 25 \u00b0C",
+        "ensemble_wape": 8.64,
+        "naive_wape": 11.91,
+        "hours": 890.0
+      }
+    ]
+  },
+  "peak_detection": {
+    "building_days": 393,
+    "peak_hour_hit_rate_pct": {
+      "ensemble": 37.9,
+      "naive": 33.8
+    },
+    "median_peak_size_error_pct": {
+      "ensemble": 9.7,
+      "naive": 11.6
+    },
+    "definition": "Hit = forecast peak hour within \u00b11 h of the actual daily peak hour."
+  },
+  "cost_scenario": {
+    "n_buildings": 10,
+    "mean_abs_error_kwh_per_hour": {
+      "ensemble": 36.48,
+      "naive": 56.59
+    },
+    "annual_error_kwh_per_building": {
+      "ensemble": 319591,
+      "naive": 495723
+    },
+    "annual_error_kwh_avoided_per_building": 176133,
+    "scenarios": [
+      {
+        "price_usd_per_kwh_error": 0.02,
+        "annual_cost_per_building_ensemble": 6392,
+        "annual_cost_per_building_naive": 9914,
+        "annual_saving_per_building": 3523,
+        "annual_saving_portfolio": 35227
+      },
+      {
+        "price_usd_per_kwh_error": 0.05,
+        "annual_cost_per_building_ensemble": 15980,
+        "annual_cost_per_building_naive": 24786,
+        "annual_saving_per_building": 8807,
+        "annual_saving_portfolio": 88066
+      },
+      {
+        "price_usd_per_kwh_error": 0.1,
+        "annual_cost_per_building_ensemble": 31959,
+        "annual_cost_per_building_naive": 49572,
+        "annual_saving_per_building": 17613,
+        "annual_saving_portfolio": 176133
+      }
+    ],
+    "note": "Error kWh are measured in the backtest; $/kWh of error is a scenario assumption."
+  },
+  "top_drivers": [
+    {
+      "feature": "energy_consumption_kwh_lag_1",
+      "mean_abs_shap": 0.1472
+    },
+    {
+      "feature": "energy_consumption_kwh_lag_24",
+      "mean_abs_shap": 0.0395
+    },
+    {
+      "feature": "energy_consumption_kwh_lag_168",
+      "mean_abs_shap": 0.0299
+    },
+    {
+      "feature": "hour_cos",
+      "mean_abs_shap": 0.0148
+    },
+    {
+      "feature": "hour_sin",
+      "mean_abs_shap": 0.0127
+    },
+    {
+      "feature": "energy_consumption_kwh_rolling_mean_24",
+      "mean_abs_shap": 0.011
+    },
+    {
+      "feature": "day_of_week",
+      "mean_abs_shap": 0.0082
+    },
+    {
+      "feature": "hour",
+      "mean_abs_shap": 0.0082
+    },
+    {
+      "feature": "is_business_hour",
+      "mean_abs_shap": 0.0067
+    },
+    {
+      "feature": "day_sin",
+      "mean_abs_shap": 0.0063
+    }
+  ],
+  "best_building": "Rat_office_Colby",
+  "worst_building": "Rat_education_Elisa"
+}

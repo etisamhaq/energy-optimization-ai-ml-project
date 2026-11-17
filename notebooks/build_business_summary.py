@@ -118,8 +118,8 @@ whose sizes differ by 100x.
    and it costs nothing to run.
 3. **Before acting on the savings estimate**, replace the assumed price of error with the site's real
    tariff and balancing costs; the kWh figures carry over unchanged.
-4. **Next model improvement:** holiday and academic-calendar features. Most of these buildings are
-   education buildings, and the remaining large misses fall on breaks the model cannot see."""),
+4. **Next model improvement:** holiday and academic-calendar features. Seven of the ten buildings
+   are education buildings, whose use follows term dates the model currently has no feature for."""),
 ]
 
 nb = nbformat.v4.new_notebook(cells=cells, metadata={'kernelspec': {'name': 'python3', 'display_name': 'Python 3'}})
