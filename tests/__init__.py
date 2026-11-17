@@ -1,3 +1,3 @@
 """
-Test suite for Energy Optimization ML project.
+Test suite for LoadLens project.
 """

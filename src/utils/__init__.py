@@ -1,5 +1,5 @@
 """
-Utility functions and configuration for Energy Optimization ML project.
+Utility functions and configuration for LoadLens project.
 """
 
 from .helpers import (

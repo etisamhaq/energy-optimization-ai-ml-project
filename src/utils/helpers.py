@@ -1,5 +1,5 @@
 """
-Utility functions for Energy Optimization ML project.
+Utility functions for LoadLens project.
 """
 
 import pandas as pd

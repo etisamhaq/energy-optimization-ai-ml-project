@@ -1,4 +1,4 @@
-# Multi-stage build for Energy Optimization ML
+# Multi-stage build for LoadLens
 FROM python:3.10-slim-bookworm AS builder
 
 # Install system dependencies

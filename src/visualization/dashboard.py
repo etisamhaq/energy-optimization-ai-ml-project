@@ -1,5 +1,5 @@
 """
-Streamlit dashboard for Energy Optimization ML.
+Streamlit dashboard for LoadLens.
 """
 
 import streamlit as st
@@ -25,7 +25,7 @@ def format_months(months):
 
 # Page configuration
 st.set_page_config(
-    page_title="Energy Optimization Dashboard",
+    page_title="LoadLens Dashboard",
     page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded"
@@ -68,7 +68,7 @@ if 'data_loader' not in st.session_state:
     st.session_state.data_loader = st.session_state.predictor.data_loader
 
 # Header
-st.markdown("<h1 class='main-header'>⚡ Energy Optimization Dashboard</h1>", unsafe_allow_html=True)
+st.markdown("<h1 class='main-header'>⚡ LoadLens Dashboard</h1>", unsafe_allow_html=True)
 
 # Sidebar
 with st.sidebar:
@@ -392,7 +392,7 @@ if 'predictions_df' in st.session_state:
         if st.button("Generate Report"):
             if report_type == "Executive Summary":
                 report_content = f"""
-# Energy Optimization Report - Executive Summary
+# LoadLens Energy Report - Executive Summary
 
 **Building:** {selected_building}  
 **Analysis Period:** {start_date} to {end_date}  

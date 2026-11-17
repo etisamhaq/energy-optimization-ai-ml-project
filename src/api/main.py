@@ -1,5 +1,5 @@
 """
-FastAPI application for Energy Optimization ML API.
+FastAPI application for LoadLens API.
 """
 
 from contextlib import asynccontextmanager
@@ -48,13 +48,13 @@ async def lifespan(app: FastAPI):
         logger.warning(f"Could not preload ensemble model: {e}")
     if not configured_api_keys():
         logger.warning("API_KEYS is not set: authentication is DISABLED. Set it in production.")
-    logger.info("Energy Optimization ML API started")
+    logger.info("LoadLens API started")
     yield
 
 
 # Initialize FastAPI app
 app = FastAPI(
-    title="Energy Optimization ML API",
+    title="LoadLens API",
     description="API for predicting building energy consumption and providing optimization recommendations",
     version="1.0.0",
     lifespan=lifespan,
@@ -168,7 +168,7 @@ class OptimizationRequest(BaseModel):
 async def root():
     """Root endpoint."""
     return {
-        "message": "Energy Optimization ML API",
+        "message": "LoadLens API",
         "version": "1.0.0",
         "endpoints": {
             "predictions": "/predict",

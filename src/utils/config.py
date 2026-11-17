@@ -1,5 +1,5 @@
 """
-Configuration management for Energy Optimization ML project.
+Configuration management for LoadLens project.
 """
 
 import os

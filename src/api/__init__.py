@@ -1,5 +1,5 @@
 """
-Energy Optimization ML API package.
+LoadLens API package.
 """
 
 from .main import app

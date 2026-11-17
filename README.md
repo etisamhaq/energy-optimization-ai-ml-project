@@ -57,22 +57,38 @@ Buildings account for roughly 30% of global final energy use and about a quarter
 ## Project Structure
 
 ```
-energy-optimization-ml/
-├── data/               # Data storage
-│   ├── raw/           # Original datasets
-│   ├── processed/     # Cleaned and transformed data
-│   └── external/      # External data sources (weather, etc.)
-├── notebooks/         # Jupyter notebooks for analysis
-├── src/               # Source code
-│   ├── data/          # Data processing modules
-│   ├── features/      # Feature engineering
-│   ├── models/        # ML model implementations
-│   ├── visualization/ # Plotting and dashboard code
-│   └── utils/         # Helper functions
-├── models/            # Saved model artifacts (created by training)
-├── tests/             # Unit and integration tests
-└── requirements.txt   # Project dependencies
+loadlens/
+├── data/                # Data storage (raw, processed, external weather cache; not in git)
+├── notebooks/           # EDA notebook + build_business_summary.py (business summary notebook)
+├── src/
+│   ├── data/            # BDG2 / Open-Meteo loaders, preprocessing, meter-outage repair (quality.py)
+│   ├── features/        # Feature engineering and per-building target scaling
+│   ├── models/          # XGBoost, LightGBM, Random Forest, ensemble; training and recursive forecasting
+│   ├── evaluation/      # Backtest, business-impact report (errors, peaks, cost, SHAP), results-site builder
+│   ├── optimization/    # Savings recommendations with stated assumptions
+│   ├── api/             # FastAPI service (auth, rate limiting, metrics)
+│   ├── visualization/   # Streamlit dashboard
+│   └── utils/           # Helpers and configuration
+├── reports/             # Backtest metrics, business metrics and figures (generated, committed)
+├── site/                # Static results page served by Vercel (index.html + data.json)
+├── models/              # Saved model artifacts (created by training; not in git)
+├── tests/               # Unit and integration tests, run in GitHub Actions
+├── vercel.json          # Serves site/ as a static page
+└── requirements.txt     # Project dependencies
 ```
+
+### Results page
+
+The page at https://energy-optimization-ai-ml-project.vercel.app/ is static: it shows the saved backtest
+results and runs no model. After re-running the backtest, rebuild its data and push:
+
+```bash
+make backtest report
+python3 src/evaluation/build_site.py   # writes site/data.json
+```
+
+The SHAP step needs `pip install shap`. It uses exact TreeSHAP for XGBoost and LightGBM and the fast
+Saabas approximation for the Random Forest, whose deep trees make exact SHAP take hours.
 
 ## Installation
 

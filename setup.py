@@ -1,5 +1,5 @@
 """
-Setup script for Energy Optimization ML package.
+Setup script for LoadLens package.
 """
 
 from setuptools import setup, find_packages

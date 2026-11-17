@@ -1,10 +1,10 @@
 PYTHON ?= python3
 
-.PHONY: backtest report help setup install install-dl clean test test-file lint format collect-data collect-real preprocess train train-single predict run-api run-dashboard run-mlflow docker-build docker-up docker-down docker-logs pipeline dev deploy
+.PHONY: backtest report site help setup install install-dl clean test test-file lint format collect-data collect-real preprocess train train-single predict run-api run-dashboard run-mlflow docker-build docker-up docker-down docker-logs pipeline dev deploy
 
 # Default target
 help:
-	@echo "Energy Optimization ML - Available commands:"
+	@echo "LoadLens - Available commands:"
 	@echo "  make setup          - Set up development environment"
 	@echo "  make install        - Install dependencies"
 	@echo "  make install-dl     - Install optional deep-learning dependencies (LSTM)"
@@ -89,6 +89,9 @@ train-single:
 # Evaluation
 backtest:
 	$(PYTHON) src/evaluation/backtest.py
+
+site:
+	$(PYTHON) src/evaluation/build_site.py
 
 report:
 	$(PYTHON) src/evaluation/business_impact.py

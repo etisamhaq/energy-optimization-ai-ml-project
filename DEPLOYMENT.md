@@ -1,4 +1,4 @@
-# Energy Optimization ML - Deployment Guide
+# LoadLens - Deployment Guide
 
 ## Table of Contents
 1. [Prerequisites](#prerequisites)

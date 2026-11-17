@@ -1,5 +1,5 @@
 """
-Feature engineering package for Energy Optimization ML.
+Feature engineering package for LoadLens.
 """
 
 from .feature_engineering import EnergyFeatureEngineer

@@ -1,4 +1,4 @@
-# Energy Optimization ML Configuration
+# LoadLens Configuration
 
 model:
   ensemble_models:

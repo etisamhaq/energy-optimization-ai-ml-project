@@ -1,5 +1,5 @@
 """
-Energy Optimization ML - Main package.
+LoadLens - Main package.
 
 Subpackages are imported on demand (e.g. ``from src.models import XGBoostModel``)
 so that importing one component doesn't pull in the API, dashboard or heavy

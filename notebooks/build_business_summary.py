@@ -79,8 +79,11 @@ display(Markdown(
     f"peak **{p['peak_hour_hit_rate_pct']['ensemble']}%** of the time (baseline "
     f"{p['peak_hour_hit_rate_pct']['naive']}%). Median error in the peak's size: "
     f"**{p['median_peak_size_error_pct']['ensemble']}%** (baseline {p['median_peak_size_error_pct']['naive']}%).\\n\\n"
-    "Peak demand sets demand charges, so this is the number a facility manager would act on, "
-    "for example to pre-cool before the peak or shift flexible load."
+    "Peak demand sets demand charges, so a facility manager would act on this, for example to "
+    "pre-cool before the peak or shift flexible load. The honest reading: the model is only modestly "
+    "better at the exact peak *hour*, because these buildings run on a flat daytime plateau (on about "
+    "half of the days, an hour more than an hour away from the peak is within 3% of it). Its clearer "
+    "advantage is the peak's *size* and the total energy."
 ))"""),
     md("""## 5. What the error is worth (scenario, not a measurement)
 
