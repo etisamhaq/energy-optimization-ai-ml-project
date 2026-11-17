@@ -18,6 +18,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(
 
 from src.features.feature_engineering import EnergyFeatureEngineer
 from src.features.target_scaling import SCALE_FEATURE
+from src.data.quality import repair_outages_by_building
 
 logging.basicConfig(
     level=logging.INFO,
@@ -237,8 +238,15 @@ class DataPreprocessor:
         # Clean data
         df = self.clean_data(df)
         
+        # Meter outages: repair the readings so lag features see a plausible history
+        # (as forecasting does), then drop rows whose target was a broken reading
+        df = repair_outages_by_building(df)
+        logger.info(f"Repaired {int(df['meter_outage'].sum())} meter-outage hours "
+                    f"({df['meter_outage'].mean():.2%} of readings)")
+        
         # Apply feature engineering
         df = self.prepare_features(df)
+        df = df[~df['meter_outage']].drop(columns='meter_outage')
         
         # Create train/val/test split
         datasets = self.create_train_test_split(df, test_size, val_size)

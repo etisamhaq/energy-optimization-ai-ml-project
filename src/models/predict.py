@@ -19,6 +19,7 @@ from src.models import XGBoostModel, LightGBMModel, RandomForestModel, EnsembleM
 from src.features.target_scaling import TARGET_HISTORY_FEATURE, SCALE_FEATURE, MIN_SCALE
 from src.features.feature_engineering import EnergyFeatureEngineer
 from src.data.data_loader import EnergyDataLoader, hourly_range
+from src.data.quality import repair_outages
 
 logging.basicConfig(
     level=logging.INFO,
@@ -213,6 +214,8 @@ class EnergyPredictor:
         history = history[~history.index.duplicated()]
         if not history.empty:
             history = history.asfreq('H').interpolate(limit_direction='both')
+            # A failed meter reads near zero; forecasting from that would predict an empty building
+            history = repair_outages(history)
         
         max_lookback = max(
             [int(TARGET_HISTORY_FEATURE.fullmatch(c).group(2)) for c in feature_cols

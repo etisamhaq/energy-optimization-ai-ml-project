@@ -1,4 +1,6 @@
-.PHONY: help setup install install-dl clean test test-file lint format collect-data collect-real preprocess train train-single predict run-api run-dashboard run-mlflow docker-build docker-up docker-down docker-logs pipeline dev deploy
+PYTHON ?= python3
+
+.PHONY: backtest report help setup install install-dl clean test test-file lint format collect-data collect-real preprocess train train-single predict run-api run-dashboard run-mlflow docker-build docker-up docker-down docker-logs pipeline dev deploy
 
 # Default target
 help:
@@ -14,6 +16,8 @@ help:
 	@echo "  make collect-real   - Download real BDG2 meter data + Open-Meteo weather"
 	@echo "  make preprocess     - Preprocess collected data"
 	@echo "  make train          - Train models"
+	@echo "  make backtest       - Rolling-origin backtest vs naive baseline (reports/)"
+	@echo "  make report         - Error analysis, peak accuracy, cost scenario, SHAP (reports/)"
 	@echo "  make run-api        - Run FastAPI server"
 	@echo "  make run-dashboard  - Run Streamlit dashboard"
 	@echo "  make docker-build   - Build Docker images"
@@ -22,7 +26,7 @@ help:
 
 # Setup development environment
 setup:
-	python3 -m venv venv
+	$(PYTHON) -m venv venv
 	@echo "Virtual environment created. Activate with:"
 	@echo "  source venv/bin/activate  # On Linux/Mac"
 	@echo "  venv\\Scripts\\activate     # On Windows"
@@ -66,25 +70,32 @@ format:
 
 # Data pipeline
 collect-data:
-	python src/data/collect_data.py --source synthetic --n-buildings 10 --n-days 365
+	$(PYTHON) src/data/collect_data.py --source synthetic --n-buildings 10 --n-days 365
 
 collect-real:
-	python src/data/collect_data.py --source bdg2 --site Rat --n-buildings 10
+	$(PYTHON) src/data/collect_data.py --source bdg2 --site Rat --n-buildings 10
 
 preprocess:
-	python src/data/preprocess.py
+	$(PYTHON) src/data/preprocess.py
 
 # Model training
 train:
-	python src/models/train.py --model ensemble
+	$(PYTHON) src/models/train.py --model ensemble
 
 train-single:
 	@read -p "Enter model name (xgboost/lightgbm/random_forest): " model; \
-	python src/models/train.py --model $$model
+	$(PYTHON) src/models/train.py --model $$model
+
+# Evaluation
+backtest:
+	$(PYTHON) src/evaluation/backtest.py
+
+report:
+	$(PYTHON) src/evaluation/business_impact.py
 
 # Predictions
 predict:
-	python src/models/predict.py --model ensemble
+	$(PYTHON) src/models/predict.py --model ensemble
 
 # Run services
 run-api:
