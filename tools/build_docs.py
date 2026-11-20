@@ -43,7 +43,7 @@ def rewrite_links(text: str, source: str) -> str:
             return match.group(0)
         if (ROOT / path).exists():
             kind = "tree" if (ROOT / path).is_dir() else "blob"
-            return f"{label}({GITHUB}/{kind}/main/{path}{suffix})"
+            return f"{label}({GITHUB}/{kind}/master/{path}{suffix})"
         raise FileNotFoundError(f"Broken link in {source}: {href}")
 
     return LINK.sub(fix, text)
@@ -79,8 +79,8 @@ def results_page() -> str:
     return f"""# Results
 
 Every number on this page is written by `tools/build_docs.py` from the saved backtest files
-([`reports/backtest_metrics.json`]({GITHUB}/blob/main/reports/backtest_metrics.json) and
-[`reports/business_metrics.json`]({GITHUB}/blob/main/reports/business_metrics.json)), so it always matches the
+([`reports/backtest_metrics.json`]({GITHUB}/blob/master/reports/backtest_metrics.json) and
+[`reports/business_metrics.json`]({GITHUB}/blob/master/reports/business_metrics.json)), so it always matches the
 committed results. `make backtest report` regenerates them. For an interactive version, see the
 [results page]({RESULTS_PAGE}).
 
