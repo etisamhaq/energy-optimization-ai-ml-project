@@ -8,7 +8,7 @@ Forecasts each building's hourly electricity use for the next 48 hours from real
 ![FastAPI](https://img.shields.io/badge/API-FastAPI-009688.svg)
 ![License](https://img.shields.io/badge/License-MIT-lightgrey.svg)
 
-**[See the interactive results →](https://energy-optimization-ai-ml-project.vercel.app/)**
+**[See the interactive results →](https://energy-optimization-ai-ml-project.vercel.app/)** · **[Read the docs →](https://etisamhaq.github.io/energy-optimization-ai-ml-project/)**
 
 ## At a Glance
 

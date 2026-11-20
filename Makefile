@@ -1,6 +1,6 @@
 PYTHON ?= python3
 
-.PHONY: backtest report site help setup install install-dl clean test test-file lint format collect-data collect-real preprocess train train-single predict run-api run-dashboard run-mlflow docker-build docker-up docker-down docker-logs pipeline dev deploy
+.PHONY: backtest report site docs help setup install install-dl clean test test-file lint format collect-data collect-real preprocess train train-single predict run-api run-dashboard run-mlflow docker-build docker-up docker-down docker-logs pipeline dev deploy
 
 # Default target
 help:
@@ -92,6 +92,9 @@ backtest:
 
 site:
 	$(PYTHON) src/evaluation/build_site.py
+
+docs:
+	$(PYTHON) tools/build_docs.py && mkdocs build --strict
 
 report:
 	$(PYTHON) src/evaluation/business_impact.py

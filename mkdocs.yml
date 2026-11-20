@@ -1,0 +1,49 @@
+site_name: "LoadLens: Building Energy Forecasting"
+site_description: 48-hour building electricity forecasts tested on real meter data, with error analysis, cost of error and SHAP drivers.
+site_url: https://etisamhaq.github.io/energy-optimization-ai-ml-project/
+repo_url: https://github.com/etisamhaq/energy-optimization-ai-ml-project
+repo_name: etisamhaq/energy-optimization-ai-ml-project
+edit_uri: ""
+copyright: MIT licensed code. BDG2 and Open-Meteo data are CC BY 4.0.
+
+# Pages are generated from the repository's own documents and saved results by tools/build_docs.py
+docs_dir: docs_site
+site_dir: site_build
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: teal
+      accent: amber
+      toggle: { icon: material/weather-night, name: Switch to dark mode }
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: teal
+      accent: amber
+      toggle: { icon: material/weather-sunny, name: Switch to light mode }
+  features:
+    - navigation.tabs
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - toc.follow
+  icon:
+    repo: fontawesome/brands/github
+
+markdown_extensions:
+  - tables
+  - toc: { permalink: true }
+  - admonition
+  - attr_list
+  - md_in_html
+  - pymdownx.superfences
+  - pymdownx.highlight
+  - pymdownx.inlinehilite
+
+nav:
+  - Overview: index.md
+  - Results: results.md
+  - Deployment: deployment.md

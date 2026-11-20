@@ -188,3 +188,7 @@ reports/*.pdf
 !reports/.gitkeep
 
 *.csv
+
+# Generated documentation site
+docs_site/
+site_build/
